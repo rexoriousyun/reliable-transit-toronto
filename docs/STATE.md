@@ -3,7 +3,7 @@
 **Read this first.** A single anchor for where the project stands, so no finding depends
 on anyone remembering a conversation. Everything below is reproducible from the repo.
 
-**Last updated:** 2026-09-02. **Every milestone is built, and the design upgrade is in.**
+**Last updated:** 2026-11-06. **Every milestone is built, and the design upgrade is in.**
 The product is ready for rider testing, and that is now the only thing it is waiting on —
 see `docs/ux/08-research.md`.
 
@@ -53,7 +53,7 @@ would reverse it.
 | Milestone | State |
 |---|---|
 | M0 scaffold | done |
-| M1 ingestion | done — 163,725 incidents + GTFS |
+| M1 ingestion | done — 180,027 incidents, 2025-01-01 to 2026-09-30 (refreshed 2026-11-06) + GTFS |
 | M2 `Min Gap` audit *(gate)* | **passed** |
 | M3 segment model | done — 142 subway, 18,840 surface |
 | M4 reliability scoring | done |
@@ -80,6 +80,7 @@ would reverse it.
 | Design upgrade, pass 2 | **done** — usual trips, states, step rail, hour strip, desktop, walk-or-wait |
 | Live service signal | **done** — which routes are moving now, route level only (D-47, E-D29) |
 | Plan from an address | **done** — 525,470 address points; the walk at each end is part of the answer (D-48) |
+| Portfolio readiness | **done** — CI, MIT licence, open data credit and data dates on screen, README screenshots; the production build draws its map again (E-D34) |
 
 ## The numbers that matter
 
