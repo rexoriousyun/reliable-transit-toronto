@@ -1,47 +1,115 @@
+/* Manrope, self-hosted (`D-43`).
+   One variable file, latin subset, 24.8 KB — covers 400 through 800, so the
+   five weights the type scale uses cost one request rather than five. Served
+   from our own origin: a Google Fonts round trip before first paint is exactly
+   the cost `D-36` spent a milestone removing for a rider on a shelter's signal.
+   `font-display: swap` so the text is readable while it arrives; the system
+   stack behind it in `body` is what shows in the meantime. */
+@font-face {
+  font-family: "Manrope";
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url("/fonts/manrope-latin-var.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+                 U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC,
+                 U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Dark is the default and light is a choice (`D-42`). The rider this is built
+   for is outdoors at a stop, often at dusk; following the system theme was
+   never a decision, it was the absence of one. `[data-theme]` is stamped on
+   the root by the toggle and must beat the media query in both directions. */
 :root {
-  color-scheme: light dark;
+  /* Exactly `dark`, not `dark light`.
+     `dark light` says the page supports both and lets the *system* decide — so
+     on a machine set to light, Chrome painted the native select and its popup
+     light while `D-42` painted everything around them dark. The dropdown was
+     invisible. Dark is this app's choice, not the system's, so the property has
+     to state one value and mean it. */
+  color-scheme: dark;
 
   /* Encoding tokens — validated for CVD separation, normal-vision floor and
-     3:1 contrast in both modes. See docs/design/01-system.md. */
+     3:1 contrast in both modes. See docs/design/01-system.md. Unchanged by the
+     2026-09-02 upgrade: they were validated numerically and nothing about the
+     surfaces around them changes what they encode. */
+  --scale-1: #57c78a;
+  --scale-2: #eda545;
+  --scale-3: #e35f4e;
+  --unknown: #57c78a;
+  --blocked: #d8d8d2;
+  /* Walking: off the scale by design — see the Tokens comment in map.ts. */
+  --walk: #9c9c94;
+
+  /* Surfaces. Three now rather than one: the sheet gained cards (`D-45`'s
+     price tiles and worst-stretch row), so a focused row needs to be
+     distinguishable from the card it sits in without a shadow doing it. */
+  --surface-0: #101014;
+  --surface-1: #1a1a20;
+  --surface-2: #202027;
+  --line: #2a2a31;
+  --ink: #f2f2ec;
+  --ink-2: #a9a9a3;
+  /* 4.6:1 on --surface-1. Do not go lighter. */
+  --ink-3: #7c7c78;
+  --inverse-bg: #f2f2ec;
+  --inverse-fg: #101014;
+
+  /* Kept as aliases so the map and the older sheet keep working while the
+     components migrate one at a time. */
+  --panel: var(--surface-1);
+  --rule: var(--line);
+
+  /* Unknown is a texture, never a colour on the ramp (`D-26`, `D-45`). */
+  --unknown-hatch: repeating-linear-gradient(45deg, var(--ink-3) 0 2px, transparent 2px 6px);
+
+  --shadow: 0 -1px 0 var(--line), 0 -8px 28px rgba(0, 0, 0, 0.5);
+  --control-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 10px rgba(0, 0, 0, 0.3);
+
+  /* 4px rhythm. Every vertical gap is a multiple. */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px;
+  --radius: 10px;
+  --radius-card: 18px; --radius-tile: 14px; --radius-btn: 14px;
+  --radius-chip: 10px; --radius-tag: 6px;
+
+  /* The map is the ground and the sheet sits on it; the fade is what joins
+     them, so it is a token rather than a gradient repeated per screen. */
+  --map-fade: linear-gradient(180deg, transparent 16%, rgba(16, 16, 20, 0.9) 27%, var(--surface-0) 33%);
+}
+
+/* One reserved hue, per design rule 2. The selection blue that used to live
+   here competed with the encoding scale on the map halo and in dark-mode
+   focus — two reserved hues, which the rule forbids. Focus is now ink. */
+:root { --accent: var(--ink); }
+
+:root[data-theme="light"] {
+  color-scheme: light;
   --scale-1: #1a7f4c;
   --scale-2: #d9882c;
   --scale-3: #c33f2b;
   --unknown: #1a7f4c;
   --blocked: #2b2b28;
-  /* Walking: off the scale by design — see the Tokens comment in map.ts. */
   --walk: #4a4a44;
-
-  /* Surfaces and ink. One elevation only: the map is the ground, the sheet
-     sits on it. Nothing else floats. */
-  --panel: #ffffff;
+  --surface-0: #f2f1ee;
+  --surface-1: #ffffff;
+  --surface-2: #f7f6f3;
+  --line: #e2e2db;
   --ink: #1a1a18;
   --ink-2: #55554e;
   --ink-3: #7d7d74;
-  --rule: #e2e2db;
-  --accent: #1a5fd0;
-  --shadow: 0 -1px 0 var(--rule), 0 -8px 28px rgba(0, 0, 0, 0.09);
+  --inverse-bg: #1a1a18;
+  --inverse-fg: #ffffff;
+  --shadow: 0 -1px 0 var(--line), 0 -8px 28px rgba(0, 0, 0, 0.09);
   --control-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 2px 10px rgba(0, 0, 0, 0.06);
-
-  /* 4px rhythm. Every vertical gap is a multiple. */
-  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px;
-  --radius: 10px;
+  --map-fade: linear-gradient(180deg, transparent 16%, rgba(242, 241, 238, 0.9) 27%, var(--surface-0) 33%);
 }
-@media (prefers-color-scheme: dark) {
+
+@media (min-width: 1024px) {
   :root {
-    --scale-1: #57c78a;
-    --scale-2: #eda545;
-    --scale-3: #e35f4e;
-    --unknown: #57c78a;
-    --blocked: #d8d8d2;
-    --walk: #9c9c94;
-    --panel: #1c1c20;
-    --ink: #f0f0ea;
-    --ink-2: #a8a8a0;
-    --ink-3: #83837b;
-    --rule: #33333a;
-    --accent: #7fb0ff;
-    --shadow: 0 -1px 0 var(--rule), 0 -8px 28px rgba(0, 0, 0, 0.5);
-    --control-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 10px rgba(0, 0, 0, 0.3);
+    --map-fade: linear-gradient(90deg, var(--surface-0) 0 36%, rgba(16, 16, 20, 0.9) 42%, transparent 58%);
+  }
+  :root[data-theme="light"] {
+    --map-fade: linear-gradient(90deg, var(--surface-0) 0 36%, rgba(242, 241, 238, 0.9) 42%, transparent 58%);
   }
 }
 
@@ -49,12 +117,28 @@
 html, body, #root { height: 100%; margin: 0; }
 body {
   color: var(--ink);
-  font: 15px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--surface-0);
+  /* One face (`D-43`). The system stack stays behind it: the subset is
+     self-hosted, so if it has not arrived the fallback is what shipped
+     before rather than a blank screen. */
+  font: 16px/1.45 Manrope, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   /* Numbers are the product: digits must not jitter when a value changes. */
   font-variant-numeric: tabular-nums;
   -webkit-text-size-adjust: 100%;
   -webkit-font-smoothing: antialiased;
 }
+
+/* Type scale (`D-43`). Numbers first: every step that carries a value is
+   tabular and tight, every step that carries prose is not. */
+.t-display { font-size: 52px; line-height: 0.95; font-weight: 800; letter-spacing: -0.035em; }
+.t-h1 { font-size: 36px; line-height: 1.05; font-weight: 800; letter-spacing: -0.025em; }
+.t-h2 { font-size: 32px; line-height: 1.05; font-weight: 800; letter-spacing: -0.02em; }
+.t-h3 { font-size: 26px; line-height: 1.1; font-weight: 800; letter-spacing: -0.015em; }
+.t-stat { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+.t-body { font-size: 16px; line-height: 1.45; }
+.t-body-s { font-size: 14px; line-height: 1.45; }
+.t-meta { font-size: 12.5px; }
+.t-micro { font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
 
 .app { position: relative; height: 100%; overflow: hidden; }
 .map { position: absolute; inset: 0; }
@@ -102,6 +186,9 @@ select {
   background-repeat: no-repeat;
 }
 .topbar > select { width: 100%; font-size: 15px; font-weight: 500; }
+/* The popup is drawn by the browser, which does not inherit our tokens — the
+   options need their own colours or they fall back to the platform's. */
+select option { background: var(--surface-1); color: var(--ink); }
 .filters select { flex: 1 1 0; min-width: 0; color: var(--ink-2); }
 
 /* ---- Sheet ---------------------------------------------------------------
@@ -660,3 +747,278 @@ select {
 .tag-body p + p { margin-top: var(--s2); }
 .tag-body strong { color: var(--ink); font-weight: 600; }
 .tag-note { color: var(--ink-3); font-size: 12.5px; }
+
+/* ---- Confidence, one mark everywhere (D-45) -------------------------------
+   Two channels on every state — fill and border style — so it survives
+   greyscale and CVD without a legend, the same rule the map encoding follows. */
+.cmark {
+  display: inline-block;
+  flex: none;
+  border-radius: 50%;
+  box-sizing: border-box;
+  vertical-align: baseline;
+}
+.cmark-measured { background: var(--ink); }
+.cmark-thin { border: 1.5px solid var(--ink-2); }
+.cmark-unknown { border: 1.5px dashed var(--ink-3); }
+
+.cband { display: flex; flex-direction: column; gap: var(--s2); }
+.cband-track {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  /* The unmeasured remainder is texture, never a colour on the ramp (D-26). */
+  background-image: var(--unknown-hatch);
+  background-color: var(--surface-2);
+}
+.cband-fill {
+  height: 100%;
+  border-radius: 3px;
+  transform-origin: left center;
+  animation: cband-grow 400ms linear;
+}
+@keyframes cband-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.cband-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s3);
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.cband-unknown { color: var(--ink-3); }
+
+@media (prefers-reduced-motion: reduce) {
+  .cband-fill { animation: cband-fade 120ms ease; }
+  @keyframes cband-fade { from { opacity: 0; } to { opacity: 1; } }
+}
+
+/* ---- Verdict card (D-45) --------------------------------------------------
+   The answer leads. Four blocks before the buttons, and exactly one of them is
+   verb-sized — the rest step down hard so the hierarchy is read, not parsed. */
+.verdict { display: flex; flex-direction: column; gap: var(--s4); }
+.verdict-lead { display: flex; flex-direction: column; gap: var(--s2); }
+.verdict-head { margin: 0; color: var(--ink); }
+.verdict-late .verdict-head { color: var(--scale-3); }
+.verdict-sentence { margin: 0; color: var(--ink-2); }
+.verdict-sentence strong { color: var(--ink); font-weight: 700; }
+/* The mark sits with the sentence it qualifies, never on its own line. */
+.verdict-sentence .cmark { margin-left: 6px; vertical-align: middle; }
+
+.verdict-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2); }
+.tile {
+  display: flex; flex-direction: column; gap: var(--s1);
+  padding: 14px;
+  background: var(--surface-2);
+  border-radius: var(--radius-tile);
+}
+.tile-label { color: var(--ink-3); }
+.tile-value { color: var(--ink); }
+.tile-detail { color: var(--ink-2); }
+@media (max-width: 380px) { .verdict-tiles { grid-template-columns: 1fr; } }
+
+.worst-row {
+  display: flex; align-items: center; gap: var(--s3);
+  width: 100%; padding: var(--s3) var(--s4);
+  font: inherit; text-align: left; color: var(--ink-2);
+  background: var(--surface-2);
+  border: 1px solid transparent; border-radius: var(--radius-tile);
+  cursor: pointer;
+}
+.worst-row strong { color: var(--ink); font-weight: 700; }
+.worst-row.is-active { border-color: var(--scale-3); }
+.worst-text { flex: 1; }
+.worst-chevron { color: var(--ink-3); font-size: 18px; line-height: 1; }
+.worst-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.verdict-actions { display: flex; gap: var(--s2); }
+.btn {
+  flex: 1; padding: 13px var(--s4);
+  font: inherit; font-size: 15px; font-weight: 600;
+  color: var(--ink); background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: var(--radius-btn);
+  cursor: pointer;
+}
+.btn-primary {
+  color: var(--inverse-fg); background: var(--inverse-bg); border-color: var(--inverse-bg);
+}
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Recents header inside the suggestion list (D-44). Not a button: it labels
+   the group, and a tappable-looking row that does nothing is worse than none. */
+.suggestions-head {
+  padding: var(--s2) var(--s3) var(--s1);
+  color: var(--ink-3);
+  cursor: default;
+}
+
+/* ---- Usual trips (D-44) ---------------------------------------------------
+   A trip earns its place by being planned and leaves by falling off the end.
+   No stars, nothing to curate. */
+.usual { display: flex; flex-direction: column; gap: var(--s3); }
+.usual-head { color: var(--ink-3); margin: 0; }
+.usual-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s2); }
+.usual-row {
+  display: flex; align-items: stretch; gap: var(--s1);
+  background: var(--surface-2); border-radius: var(--radius-tile); overflow: hidden;
+}
+.usual-open {
+  flex: 1; min-width: 0; padding: var(--s3) var(--s4);
+  font: inherit; text-align: left; color: var(--ink);
+  background: none; border: 0; cursor: pointer;
+}
+.usual-pair { display: block; }
+.usual-arrow { color: var(--ink-3); }
+.usual-remove {
+  flex: none; width: 44px;
+  font: inherit; font-size: 20px; line-height: 1; color: var(--ink-3);
+  background: none; border: 0; cursor: pointer;
+}
+.usual-open:focus-visible, .usual-remove:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* ---- States ---------------------------------------------------------------
+   Each says what is true and what it means, in that order. None apologise, and
+   none imply the app is broken when it is the data that is missing (P-03). */
+.state { display: flex; align-items: center; gap: var(--s3); padding: var(--s3) 0; }
+.state-text { margin: 0; color: var(--ink-2); }
+.state-stale .state-text, .state-thin .state-text { color: var(--ink-3); }
+.state-spinner {
+  flex: none; width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid var(--line); border-top-color: var(--ink-2);
+  animation: state-spin 900ms linear infinite;
+}
+@keyframes state-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .state-spinner { animation: none; border-top-color: var(--line); }
+}
+
+/* ---- Step rail ------------------------------------------------------------
+   The rail is the second channel: stroke weight carries risk share, so where
+   the danger is can be read before any of it is. Walk dashed, wait thin —
+   neither is a measured stretch and drawing them heavy would imply it. */
+.legs .leg { display: grid; grid-template-columns: 52px 20px 1fr; align-items: start; }
+.leg-rail {
+  grid-column: 2; position: relative;
+  display: flex; flex-direction: column; align-items: center;
+  align-self: stretch; padding-top: 5px;
+}
+.rail-node {
+  flex: none; width: 8px; height: 8px; border-radius: 50%; box-sizing: border-box;
+}
+.rail-measured { background: var(--ink); }
+.rail-thin { border: 1.5px solid var(--ink-2); }
+.rail-unknown { border: 1.5px dashed var(--ink-3); }
+.rail-line { flex: 1; min-height: 14px; border-radius: 3px; margin-top: 2px; }
+.rail-line-ride { background: var(--ink-2); }
+.rail-line-wait { width: 2px; background: var(--ink-3); }
+/* Walking is off the reliability scale by design; the dash says so. */
+.rail-line-walk {
+  width: 2px;
+  background-image: repeating-linear-gradient(to bottom, var(--ink-3) 0 3px, transparent 3px 7px);
+}
+.leg-body, .leg-headway, .leg-today, .leg-risk { grid-column: 3; }
+.leg-time { grid-column: 1; }
+
+/* ---- Desktop (>= 1024px) --------------------------------------------------
+   The phone layout stacks because vertical space is the scarce resource there.
+   On a wide screen it is horizontal space that is plentiful, so the sheet
+   becomes a column and the map takes the rest — the same relationship (map is
+   the ground, sheet sits on it), rotated. D-15 is mobile-*first*, not
+   mobile-only. */
+@media (min-width: 1024px) {
+  /* Anchored to the bottom of the column rather than to a fixed top.
+     The upgrade's desktop frame assumes the trip form is its own screen; here
+     it still lives in the topbar and changes height as it opens and collapses,
+     so a hardcoded `top` put the sheet *over* the form and swallowed its
+     clicks. Growing upward from the floor cannot collide with something whose
+     height is not known. */
+  .sheet {
+    left: 28px; right: auto; top: auto; bottom: 28px;
+    width: 440px;
+    max-height: calc(100% - 300px);
+    border-radius: var(--radius-card);
+    overscroll-behavior: contain;
+  }
+  .plan-sheet.peek { max-height: calc(100% - 300px); }
+  .topbar { left: 28px; right: auto; width: 440px; padding-top: var(--s3); }
+  /* The grabber is a thumb affordance. With the column always open there is
+     nothing for it to reveal, so it stops being a control and becomes a label. */
+  .grabber { cursor: default; }
+}
+
+/* ---- Hour strip -----------------------------------------------------------
+   Replaces a 24-entry native select. Every hour is drawn, including the ones
+   with too little data — a hatched bar says "we cannot speak for this hour",
+   where a missing bar would let the strip close up and imply calm (P-03). */
+.hourstrip { display: flex; flex-direction: column; gap: var(--s2); }
+.hourstrip-head { display: flex; align-items: baseline; justify-content: space-between; }
+.hourstrip-head .t-micro { color: var(--ink-3); }
+.hourstrip-clear {
+  font: inherit; font-size: 12.5px; color: var(--ink-2);
+  background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline;
+}
+.hourstrip-bars { display: flex; align-items: flex-end; gap: 3px; height: 64px; }
+.hourbar {
+  flex: 1; height: 100%; padding: 0;
+  display: flex; align-items: flex-end;
+  background: none; border: 0; border-radius: 3px; cursor: pointer;
+}
+.hourbar-fill { width: 100%; border-radius: 3px; background: var(--scale-2); }
+.hourbar.is-unknown .hourbar-fill {
+  background-color: transparent;
+  background-image: var(--unknown-hatch);
+  opacity: 0.55;
+}
+.hourbar.is-selected { outline: 2px solid var(--ink); outline-offset: 1px; }
+.hourbar:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.hourstrip-axis { display: flex; justify-content: space-between; color: var(--ink-3); }
+
+/* ---- Walk vs wait (F-03, D-40) --------------------------------------------
+   Two bars on one scale: the comparison is the point, and two numbers in prose
+   make the reader do the subtraction. Downtown only — elsewhere this does not
+   render, which is the honest output rather than a missing feature. */
+.wvw { display: flex; flex-direction: column; gap: var(--s2); }
+.wvw-head { color: var(--ink-3); margin: 0; }
+.wvw-verdict { margin: 0; color: var(--ink); }
+.wvw-walk-verdict { color: var(--scale-1); }
+.wvw-bars { display: flex; flex-direction: column; gap: var(--s3); margin-top: var(--s1); }
+.wvw-row { display: grid; grid-template-columns: 92px 1fr; gap: var(--s1) var(--s3); align-items: center; }
+.wvw-label { color: var(--ink-2); }
+.wvw-track { display: flex; height: 10px; border-radius: 5px; background: var(--surface-2); overflow: hidden; }
+.wvw-fill { display: flex; height: 100%; border-radius: 5px 0 0 5px; }
+.wvw-fill.wvw-walk { background: var(--ink-2); }
+.wvw-fill.wvw-transit { background: var(--scale-1); }
+/* Standing still, inside the moving bar. P-02: the wait is the rider's
+   problem, so it is drawn rather than folded into a total. */
+.wvw-wait { height: 100%; background: var(--scale-2); }
+/* What a missed vehicle would add. Hatched because it is a possibility, not a
+   duration anyone has been promised (D-34). */
+.wvw-tail { height: 100%; background-image: var(--unknown-hatch); opacity: 0.6; }
+.wvw-note { grid-column: 2; color: var(--ink-3); }
+
+/* ---- Live now -------------------------------------------------------------
+   Route-level, because the feed cannot be joined to our stops. Absent is
+   "can't see", never "0 running" — those are opposite facts (P-03). */
+.livenow { display: flex; align-items: center; gap: var(--s2); margin: 0; color: var(--ink-2); }
+.livenow strong { color: var(--ink); font-weight: 700; }
+.livenow-dot {
+  flex: none; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--scale-1);
+}
+.livenow-unseen { color: var(--ink-3); }
+
+/* ---- The walk at each end -------------------------------------------------
+   Dashed, like every other walk in this interface: it is not a measured
+   stretch and drawing it solid would imply we know something about it. */
+.doorwalk { display: flex; flex-direction: column; gap: var(--s2); }
+.doorwalk-head { color: var(--ink-3); margin: 0; }
+.doorwalk-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s1); }
+.doorwalk-list li { display: flex; align-items: center; gap: var(--s3); color: var(--ink-2); }
+.doorwalk-list strong { color: var(--ink); font-weight: 700; }
+.doorwalk-leg {
+  flex: none; width: 14px; height: 2px;
+  background-image: repeating-linear-gradient(to right, var(--ink-3) 0 3px, transparent 3px 7px);
+}
+/* An address whose exact number we do not hold. */
+.hit-approx { display: block; color: var(--ink-3); margin-top: 2px; }
+.hit-approx .cmark { margin-right: 4px; vertical-align: middle; }

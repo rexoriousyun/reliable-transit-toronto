@@ -1,15 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MapView } from "./MapView.js";
 import { StopSearch } from "./StopSearch.js";
+import { HourStrip } from "./HourStrip.js";
+import { WalkVsWait } from "./WalkVsWait.js";
+import { DoorWalk } from "./DoorWalk.js";
+import { UsualTrips } from "./UsualTrips.js";
+import { StateCard } from "./StateCard.js";
+import { forgetTrip, recentTrips, rememberTrip, type SavedTrip } from "./recent.js";
+import type { WalkOption } from "./api.js";
 import { JourneyList } from "./JourneyList.js";
 import { JourneyDetail } from "./JourneyDetail.js";
 import { WhenControl } from "./WhenControl.js";
-import { DepartureAdvice } from "./DepartureAdvice.js";
-import { RouteKey } from "./RouteKey.js";
 import { RouteRanking } from "./RouteRanking.js";
-import { TripTags } from "./TripTags.js";
+import { VerdictCard } from "./VerdictCard.js";
 import { ViewToggle } from "./ViewToggle.js";
-import { bandLabel, exposureProperty, type View } from "./view.js";
+import { bandLabel, exposureProperty, type View, reliabilityFor } from "./view.js";
 import { UNRELIABLE_THRESHOLD, stateOf } from "./map.js";
 import {
   fetchRoutes,
@@ -21,24 +26,23 @@ import {
   type Ranking,
   type SegmentFeature,
   type ScoredJourney,
-  type StopHit,
+  type PlaceHit,
+  type AccessWalk,
   type PlanResult,
 } from "./api.js";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 /**
- * The rider is going somewhere, not planning to leave this instant. Rounding up
- * to the next quarter hour gives a target that is still true by the time they
- * have finished typing, and reads as a decision rather than a stopwatch.
+ * Seconds since midnight, on Toronto's clock rather than the device's.
  *
  * **Anchored to Toronto, not to the device.** `getHours()` reads whatever clock
  * the phone is set to, which is right for a resident and wrong for everyone
  * else: a visitor whose phone is still on Pacific time opens a Toronto transit
- * app and is handed a default three hours out, with nothing on screen to say
- * so. The network runs on Toronto time whoever is looking at it.
+ * app and is handed a time three hours out, with nothing on screen to say so.
+ * The network runs on Toronto time whoever is looking at it.
  */
-function nextQuarterHour(now: Date): number {
+function torontoSeconds(now: Date): number {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Toronto",
     hour: "2-digit",
@@ -47,8 +51,7 @@ function nextQuarterHour(now: Date): number {
   }).formatToParts(now);
   const at = (type: string): number => Number(parts.find((p) => p.type === type)?.value ?? "0");
   // "24" appears at midnight in some implementations of hour12: false.
-  const s = (at("hour") % 24) * 3600 + at("minute") * 60;
-  return Math.min(24 * 3600 - 60, Math.ceil((s + 15 * 60) / (15 * 60)) * 15 * 60);
+  return (at("hour") % 24) * 3600 + at("minute") * 60;
 }
 
 /** Station names arrive upper-cased from the incident feed; riders read signs. */
@@ -59,7 +62,19 @@ const hhmm = (s: number): string =>
   `${String(Math.floor(s / 3600) % 24).padStart(2, "0")}:${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}`;
 
 /** The answer, and only the answer. Everything behind it waits for a tap (P-09). */
-function Sheet({ feature, onClose }: { feature: SegmentFeature; onClose: () => void }): JSX.Element {
+function Sheet({
+  feature,
+  onClose,
+  day,
+  hour,
+  onHour,
+}: {
+  feature: SegmentFeature;
+  onClose: () => void;
+  day: string;
+  hour: string;
+  onHour: (h: number | null) => void;
+}): JSX.Element {
   const [showWhy, setShowWhy] = useState(false);
   const p = feature.properties;
 
@@ -76,6 +91,14 @@ function Sheet({ feature, onClose }: { feature: SegmentFeature; onClose: () => v
         {p.from} <span className="arrow">→</span> {p.to}
         {p.isTerminalApproach && <span className="flag">terminal</span>}
       </div>
+
+      {/* The whole day at once, and the hour filter is set from it. */}
+      <HourStrip
+        segmentId={p.segmentId}
+        dayOfWeek={day === "" ? undefined : day}
+        selected={hour === "" ? null : Number(hour)}
+        onSelect={onHour}
+      />
 
       {/* Loose, deliberately. The server sends `blockedBy: null`, but MapLibre
           strips null properties on the way through its source, so what arrives
@@ -158,25 +181,45 @@ export function App(): JSX.Element {
   // Planning is the product (D-14); exploring a route is a mode within it, not
   // the home screen.
   const [mode, setMode] = useState<"plan" | "explore">("plan");
-  const [from, setFrom] = useState<StopHit | null>(null);
-  const [to, setTo] = useState<StopHit | null>(null);
-  // Arrive-by is the default: the rider this is built for knows their arrival
-  // time, not their departure time (J-01).
+  const [from, setFrom] = useState<PlaceHit | null>(null);
+  const [to, setTo] = useState<PlaceHit | null>(null);
+  /**
+   * Leaving now, unless the rider says otherwise.
+   *
+   * This was arrive-by at the next quarter hour, on the reasoning that `U-02`
+   * works backwards from an obligation (`J-01`). That reasoning still holds for
+   * the *morning* trip it was written about — but it is not the common case for
+   * opening the app, which is standing somewhere wanting to go. Arrive-by asks
+   * the rider to state a deadline before it will answer, and most of the time
+   * there isn't one.
+   *
+   * Exactly now, not rounded up: "leave at" rounded to the next quarter hour
+   * silently refuses the next ten minutes of service.
+   */
   const [when, setWhen] = useState<{ mode: "arriveBy" | "departAt"; seconds: number }>(() => ({
-    mode: "arriveBy",
-    // Now, not a hardcoded morning peak: a rider opening the app is usually
-    // travelling now, and the time they are travelling in is what the figures
-    // are conditioned on.
-    seconds: nextQuarterHour(new Date()),
+    mode: "departAt",
+    seconds: torontoSeconds(new Date()),
   }));
   const [journeys, setJourneys] = useState<ScoredJourney[] | null>(null);
   const [alerts, setAlerts] = useState<{ ageHours: number | null; stale: boolean } | undefined>();
   const [chosen, setChosen] = useState<string | null>(null);
   const [planning, setPlanning] = useState(false);
+  /** Walking the whole way, when downtown makes that a real option (F-03). */
+  const [walk, setWalk] = useState<WalkOption | null>(null);
+  /** The walk at each end when the rider gave a door rather than a stop. */
+  const [doorWalk, setDoorWalk] = useState<{ access: AccessWalk | null; egress: AccessWalk | null }>(
+    { access: null, egress: null },
+  );
+  /** The rider's own trips, local only and at most five (D-44). */
+  const [trips, setTrips] = useState<SavedTrip[]>(() => recentTrips());
   const [planNote, setPlanNote] = useState<string | null>(null);
   // Results arrive expanded so the choice is real; picking one folds the sheet
   // back so the map — the retrieval mechanism (D-14) — gets the screen.
   const [listOpen, setListOpen] = useState(true);
+  /** The stretch the sheet is pointing the map at, by segment id (D-45). */
+  const [focusedSegment, setFocusedSegment] = useState<string | null>(null);
+  /** Step by step is behind a button now: it is read after deciding, not during. */
+  const [stepsOpen, setStepsOpen] = useState(false);
   // Once the trip is stated, the form has done its job. It folds to one line so
   // the map gets the height back — three input rows is 195px of an 844px phone,
   // and the map is the retrieval mechanism, not the form (D-20).
@@ -242,9 +285,16 @@ export function App(): JSX.Element {
     if (mode !== "plan" || from === null || to === null) return;
     setPlanning(true);
     setPlanNote(null);
-    planTrip(from.id, to.id, when, planStepFree)
+    planTrip(from, to, when, planStepFree)
       .then((r) => {
         if (r.journeys && r.journeys.length > 0) {
+          // Saved on success, not on entry: a pair that returns no journey is
+          // not a trip this rider takes, and offering it back tomorrow would
+          // be offering a dead end (D-44).
+          setWalk(r.walk ?? null);
+          setDoorWalk({ access: r.access ?? null, egress: r.egress ?? null });
+          rememberTrip(from, to);
+          setTrips(recentTrips());
           setJourneys(r.journeys);
           setAlerts(r.alerts);
           setStepFreeResult(r.stepFree ?? null);
@@ -336,12 +386,10 @@ export function App(): JSX.Element {
                 <option value="">Any day</option>
                 {DAYS.map((d) => <option key={d} value={d}>{d.slice(0, 3)}</option>)}
               </select>
-              <select value={hour} onChange={(e) => setHour(e.target.value)} aria-label="Hour">
-                <option value="">Any hour</option>
-                {Array.from({ length: 24 }, (_, h) => (
-                  <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>
-                ))}
-              </select>
+              {/* The 24-entry hour select is gone. Picking one hour at a time
+                  meant twenty-four reads to see the shape of a stretch's day,
+                  each replacing the last — the HourStrip on the segment sheet
+                  shows the whole day at once and sets this filter from it. */}
             </div>
             <button className="toggle" aria-pressed={stepFree} onClick={() => setStepFree(!stepFree)}>
               Step-free only
@@ -367,19 +415,41 @@ export function App(): JSX.Element {
             </button>
           )}
           {from === null || to === null ? (
-            <p className="quiet">Choose where you are starting and where you are going.</p>
+            /* F-02 opens on "saved trip?" and never had an interface for it.
+               The list is the answer to "where are you going" more often than
+               a search is, for the rider this is built for (D-44). */
+            trips.length > 0 ? (
+              <UsualTrips
+                trips={trips}
+                onOpen={(t) => { setFrom(t.from); setTo(t.to); }}
+                onRemove={(key) => { forgetTrip(key); setTrips(recentTrips()); }}
+              />
+            ) : (
+              <StateCard kind="empty" />
+            )
           ) : planning ? (
-            <p className="quiet">Planning…</p>
+            <StateCard kind="loading" />
           ) : planNote !== null ? (
             <p className="answer">{planNote}</p>
           ) : journeys !== null ? (
             <>
-              {/* Both sit directly under the map: one says which measurement
-                  is on screen, the other decodes its colours. */}
+              {/* The feed carries no active_period, so an alert's presence in
+                  the latest snapshot is the only evidence it is live (D-29).
+                  Past twelve hours we say we could not check — silence would
+                  read as "nothing is wrong today". */}
+              {!listOpen && alerts?.stale === true && <StateCard kind="stale" />}
+              {/* Routable but not forecastable. Two different capabilities, and
+                  conflating them would promise a figure we do not have. */}
+              {!listOpen && chosenJourney !== null &&
+                reliabilityFor(chosenJourney, view).coverage <= 0 && <StateCard kind="thin" />}
+              {/* Says which measurement is on screen. The colour key that used
+                  to sit beside it is gone: the ConfidenceBand in the verdict
+                  now carries the same claim in the place the number is read
+                  (D-45), and a legend for a scale nobody has looked at yet was
+                  spending height the map needs (D-20). */}
               {!listOpen && chosenJourney !== null && (
                 <ViewToggle journey={chosenJourney} view={view} onChange={setView} />
               )}
-              {!listOpen && chosenJourney !== null && <RouteKey journey={chosenJourney} />}
               {/* With a deadline the advice *is* the answer card; without one
                   the journey card is. Never both — they restate one trip. */}
               {/* Today comes before the answer: a figure that does not cover
@@ -410,22 +480,39 @@ export function App(): JSX.Element {
                   </p>
                 </div>
               )}
-              {/* Every condition on this trip, as tags that open (D-05). */}
-              {!listOpen && chosenJourney !== null && (
-                <TripTags
+              {/* J-05, downtown only. The app has to be willing to say walk
+                  (F-03), and D-40 scopes the comparison to where a second
+                  option measurably exists. */}
+              {!listOpen && walk !== null && chosenJourney !== null && (
+                <WalkVsWait walk={walk} journey={chosenJourney} />
+              )}
+              {/* The first and last mile, which used to be invisible: the trip
+                  began at a stop the rider was assumed to be standing at, so
+                  every door-to-door figure was short by this much. */}
+              {!listOpen && (doorWalk.access !== null || doorWalk.egress !== null) && (
+                <DoorWalk access={doorWalk.access} egress={doorWalk.egress} />
+              )}
+              {/* The answer, as one block. Tags, verdict, coverage, the two
+                  prices and the worst stretch — four blocks before the buttons
+                  instead of seven stacked at one size (D-45, P-06). */}
+              {!listOpen && chosenJourney !== null ? (
+                <VerdictCard
                   journey={chosenJourney}
                   view={view}
                   alerts={alerts}
                   stepFree={stepFreeResult}
+                  egressSeconds={doorWalk.egress?.seconds ?? 0}
+                  focusedSegment={focusedSegment}
+                  onFocusSegment={setFocusedSegment}
+                  onSteps={() => setStepsOpen((v) => !v)}
+                  onOthers={journeys.length > 1 ? () => setListOpen(true) : null}
                 />
-              )}
-              {!listOpen && chosenJourney?.advice != null ? (
-                <DepartureAdvice journey={chosenJourney} view={view} />
               ) : (
                 <JourneyList
                   journeys={journeys}
                   selected={chosen}
                   view={view}
+                  extraSeconds={(doorWalk.access?.seconds ?? 0) + (doorWalk.egress?.seconds ?? 0)}
                   collapsed={!listOpen}
                   onSelect={(id) => {
                     setChosen(id);
@@ -433,7 +520,12 @@ export function App(): JSX.Element {
                   }}
                 />
               )}
-              {!listOpen && chosenJourney !== null && <JourneyDetail journey={chosenJourney} view={view} />}
+              {/* Step by step, behind the button rather than always open. It
+                  is the one block a rider reads *after* deciding, so it no
+                  longer competes with the decision. */}
+              {!listOpen && stepsOpen && chosenJourney !== null && (
+                <JourneyDetail journey={chosenJourney} view={view} />
+              )}
               {!listOpen && chosenJourney?.advice != null && (
                 <p className="advice-basis">
                   An estimate from recorded disruptions — not a promise about today&rsquo;s
@@ -458,7 +550,13 @@ export function App(): JSX.Element {
           ) : null}
         </div>
       ) : feature !== null ? (
-        <Sheet feature={feature} onClose={() => setFeature(null)} />
+        <Sheet
+          feature={feature}
+          onClose={() => setFeature(null)}
+          day={day}
+          hour={hour}
+          onHour={(h) => setHour(h === null ? "" : String(h))}
+        />
       ) : (
         data !== null && (
           <div className="sheet legend-sheet">

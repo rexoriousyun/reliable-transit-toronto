@@ -8,6 +8,8 @@ interface Props {
   journeys: ScoredJourney[];
   selected: string | null;
   view: View;
+  /** Walking at the ends, so the list and the verdict quote the same trip. */
+  extraSeconds: number;
   onSelect: (id: string) => void;
   /** Peek state: show the chosen answer only, and leave the map the screen. */
   collapsed: boolean;
@@ -19,8 +21,11 @@ function Journey({
   onSelect,
   showSeverity,
   view,
+  extraSeconds,
 }: {
   j: ScoredJourney;
+  /** Walking at the ends. Zero when the rider picked stops. */
+  extraSeconds: number;
   selected: boolean;
   view: View;
   onSelect: (id: string) => void;
@@ -41,7 +46,12 @@ function Journey({
   return (
     <button className="journey" aria-pressed={selected} onClick={() => onSelect(j.id)}>
       <span className="journey-top">
-        <span className="journey-time">{j.typicalMinutes} min</span>
+        {/* The walk at the ends is part of the trip. Showing the ride-only
+            figure here while the verdict quotes a door arrival made the same
+            journey two different lengths depending on which one you read. */}
+        <span className="journey-time">
+          {j.typicalMinutes + Math.round(extraSeconds / 60)} min
+        </span>
         <span className="journey-clock">
           {hhmm(j.departAt)} → {hhmmDay(j.arriveAt, j.departAt)}
           {j.advice !== null && (
@@ -71,9 +81,22 @@ function Journey({
             until now they read identically (D-34, PR-13). */}
         {meta.length > 0 && <span className="journey-meta">{meta.join(" · ")}</span>}
       </span>
+      {/* The rate is bound to the extent it describes.
+          `composeRisk` builds this figure from the segments it could score and
+          the rest are simply absent from the product — so a trip we know almost
+          nothing about composes to a near-zero risk. On one real list the worst
+          option (79 min, 5% measured) printed the *best* reliability of four,
+          and a rider skimming for the lowest number would have landed on it.
+          Saying "on the 5% we can measure" makes the comparison visibly not
+          like-for-like, which a separate caveat line underneath did not. */}
       <span className="journey-risk">
         {rel.oneInTrips === null ? (
           <>Not enough data to say how often this goes wrong.</>
+        ) : thin ? (
+          <>
+            <strong>1 in {rel.oneInTrips}</strong> on the{" "}
+            <strong>{Math.round(rel.coverage * 100)}%</strong> of this route we can measure.
+          </>
         ) : (
           <>
             Goes wrong about <strong>1 trip in {rel.oneInTrips}</strong>
@@ -111,11 +134,9 @@ function Journey({
           Most of that sits between <strong>{worst.from}</strong> and <strong>{worst.to}</strong>.
         </span>
       )}
-      {thin && (
-        <span className="journey-thin">
-          Based on {Math.round(rel.coverage * 100)}% of this route — treat as rough.
-        </span>
-      )}
+      {/* The percentage moved into the rate above, where the number it
+          qualifies actually is. As a separate line it was read after the
+          figure, or not at all. */}
     </button>
   );
 }
@@ -135,7 +156,7 @@ function Journey({
  * mechanism (D-14) and cannot do its job through a 230px slot, so once a rider
  * has picked, the answer stays and the comparison folds away.
  */
-export function JourneyList({ journeys, selected, view, onSelect, collapsed }: Props): JSX.Element {
+export function JourneyList({ journeys, selected, view, extraSeconds, onSelect, collapsed }: Props): JSX.Element {
   const chosen = journeys.find((j) => j.id === selected) ?? journeys[0]!;
 
   // Severity is pooled across the network, not measured per route (D-11), so on
@@ -174,6 +195,7 @@ export function JourneyList({ journeys, selected, view, onSelect, collapsed }: P
               selected={collapsed || selected === j.id}
               onSelect={onSelect}
               showSeverity={shared === null}
+              extraSeconds={extraSeconds}
               view={view}
             />
           </li>

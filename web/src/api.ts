@@ -155,9 +155,9 @@ export interface JourneyReliability {
   coverage: number;
   /** Share of this trip's waiting where the vehicle never turned up at all. */
   neverCame: number | null;
-  worst: Array<{ from: string; to: string; risk: number }>;
+  worst: Array<{ segmentId: string; from: string; to: string; risk: number }>;
   /** The one stretch that dominates, or null when the risk is spread. */
-  dominant: { from: string; to: string; risk: number } | null;
+  dominant: { segmentId: string; from: string; to: string; risk: number } | null;
   /**
    * How this trip ranks against others of its length, or null when there is no
    * fair reference — too few sampled trips, or too little of this one measured.
@@ -212,6 +212,8 @@ export interface ScoredJourney {
       type: "Feature";
       geometry: { type: "LineString"; coordinates: Array<[number, number]> };
       properties: {
+        /** The stretch this feature draws. Null on a walk. */
+        segmentId: string | null;
         kind: "ride" | "walk";
         risk: number | null;
         gapMinutesPerMonth: number | null;
@@ -231,7 +233,19 @@ export interface StationAccessState {
   note?: string;
 }
 
+/** Walking the whole way, when the core makes that a real option (F-03, D-40). */
+export interface WalkOption {
+  minutes: number;
+  metres: number;
+}
+
 export interface PlanResult {
+  /** Null on almost every trip: outside downtown there is rarely a choice. */
+  walk: WalkOption | null;
+  /** The walk from the door to the first stop; null when a stop was picked. */
+  access: AccessWalk | null;
+  /** The walk from the last stop to the door. */
+  egress: AccessWalk | null;
   /** When the live alerts feed was last seen, and whether that is recent. */
   alerts?: { ageHours: number | null; stale: boolean };
   /** Present when the rider asked for step-free. */
@@ -255,18 +269,58 @@ export const searchStops = (q: string): Promise<{ stops: StopHit[] }> =>
   get(`/stops/search?q=${encodeURIComponent(q)}`);
 
 /**
+ * Anywhere a trip can start or end.
+ *
+ * A stop has an id the planner understands. An address does not — it is a
+ * coordinate, and `planTrip` sends it as one so the walk at each end becomes
+ * part of the answer instead of being invisible.
+ */
+export interface PlaceHit {
+  kind: "stop" | "address";
+  id: string;
+  name: string;
+  lat: number;
+  lon: number;
+  /** The house number asked for does not exist; this is the nearest that does. */
+  approximate: boolean;
+}
+
+export const searchPlaces = (q: string): Promise<{ places: PlaceHit[] }> =>
+  get(`/places/search?q=${encodeURIComponent(q)}`);
+
+/**
  * `when.mode` is how the rider stated the trip, not a detail of the request:
  * a deadline makes the planner search backwards for the latest departure that
  * still makes it, which is a different question from "what leaves at 08:30".
  */
 export function planTrip(
-  from: string,
-  to: string,
+  from: PlaceHit,
+  to: PlaceHit,
   when: { mode: "arriveBy" | "departAt"; seconds: number },
   stepFree = false,
 ): Promise<PlanResult> {
-  const q = `${when.mode}=${when.seconds}${stepFree ? "&stepFree=true" : ""}`;
-  return get(`/plan?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&${q}`);
+  const q = new URLSearchParams();
+  // A stop id the planner knows, or — for an address — the nearest stop it
+  // could find, which the server replaces with whichever one the timetable
+  // actually prefers once it has the coordinate.
+  q.set("from", from.id);
+  q.set("to", to.id);
+  q.set(when.mode, String(when.seconds));
+  if (stepFree) q.set("stepFree", "true");
+  // Coordinates only for a door. A rider who picked a station meant that
+  // station, and snapping it to "somewhere within 1.2 km" answers a question
+  // they did not ask.
+  if (from.kind === "address") { q.set("fromLat", String(from.lat)); q.set("fromLon", String(from.lon)); }
+  if (to.kind === "address") { q.set("toLat", String(to.lat)); q.set("toLon", String(to.lon)); }
+  return get(`/plan?${q.toString()}`);
+}
+
+/** The walk between a door and the network, when the rider gave an address. */
+export interface AccessWalk {
+  stopId: string;
+  stopName: string;
+  metres: number;
+  seconds: number;
 }
 
 export interface RankedRoute {
@@ -292,3 +346,30 @@ export interface Ranking {
 export function fetchRanking(): Promise<Ranking> {
   return get("/routes/ranking");
 }
+
+/** One hour of the day on one segment, for the hour strip. */
+export interface HourBucket {
+  hour: number;
+  /** Null when the hour has too few observations to describe (P-03). */
+  gapMinutesPerMonth: number | null;
+  sample: number;
+}
+
+export async function segmentHours(
+  segmentId: string,
+  dayOfWeek?: string,
+): Promise<{ hours: HourBucket[] }> {
+  const q = new URLSearchParams();
+  if (dayOfWeek !== undefined) q.set("dayOfWeek", dayOfWeek);
+  const suffix = q.toString() === "" ? "" : `?${q.toString()}`;
+  return get(`/segments/${encodeURIComponent(segmentId)}/hours${suffix}`);
+}
+
+/** Vehicles reporting per route, right now. Absent means not reporting (P-03). */
+export interface LiveRoutesResult {
+  vehicles: Record<string, number>;
+  ageSeconds: number;
+  stale: boolean;
+}
+
+export const fetchLiveRoutes = (): Promise<LiveRoutesResult> => get("/routes/live");

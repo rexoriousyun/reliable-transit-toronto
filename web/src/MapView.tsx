@@ -2,10 +2,14 @@ import { useEffect, useRef } from "react";
 import { Map as MlMap, NavigationControl, GeolocateControl, type GeoJSONSource, type MapMouseEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { lineColorExpression, lineWidthExpression, tokensFor, UNKNOWN_OPACITY } from "./map.js";
+import { isDark } from "./theme.js";
 import type { RouteMap, SegmentFeature } from "./api.js";
 
-/** Served by our own tile proxy — the client never contacts the basemap host. */
-const STYLE = "/tiles/style";
+/**
+ * Served by our own tile proxy — the client never contacts the basemap host —
+ * and themed there too, so the ground matches the sheet (`D-42`).
+ */
+const styleUrl = (): string => `/tiles/style?theme=${isDark() ? "dark" : "light"}`;
 const SRC = "segments";
 
 const JOURNEY_SRC = "journey";
@@ -54,7 +58,7 @@ export function MapView({ data, journey, fitToken, exposureProperty, onSelect, s
     if (container.current === null || map.current !== null) return;
     const m = new MlMap({
       container: container.current,
-      style: STYLE,
+      style: styleUrl(),
       center: [-79.3832, 43.6532],
       zoom: 11,
       attributionControl: { compact: true },
@@ -62,7 +66,7 @@ export function MapView({ data, journey, fitToken, exposureProperty, onSelect, s
     m.addControl(new NavigationControl({ showCompass: false }), "top-right");
     m.addControl(new GeolocateControl({ trackUserLocation: true }), "top-right");
 
-    const tok = tokensFor(window.matchMedia("(prefers-color-scheme: dark)").matches);
+    const tok = tokensFor(isDark());
 
     m.on("load", () => {
       m.addSource(SRC, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
@@ -290,7 +294,7 @@ export function MapView({ data, journey, fitToken, exposureProperty, onSelect, s
         "journey-ride",
         "line-color",
         lineColorExpression(
-          tokensFor(window.matchMedia("(prefers-color-scheme: dark)").matches),
+          tokensFor(isDark()),
           exposureProperty,
         ) as never,
       );

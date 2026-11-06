@@ -15,10 +15,15 @@ const fromInput = (v: string): number => {
 /**
  * When the trip has to happen.
  *
- * "Arrive by" is the default because the rider this is built for works
- * backwards from an obligation — a shift, a clinic slot, a daycare that charges
- * by the minute (J-01, U-02). A departure-time-first planner asks them to solve
- * the problem before it will answer it.
+ * **"Leave at", now, is the default.** It was arrive-by, on the reasoning that
+ * `U-02` works backwards from an obligation — a shift, a clinic slot, a daycare
+ * that charges by the minute (`J-01`). That is true of the morning trip the
+ * reasoning was written about, and it is not the common case for *opening the
+ * app*, which is standing somewhere wanting to go. Arrive-by asks the rider to
+ * state a deadline before it will answer, and most of the time there isn't one.
+ *
+ * Both are one tap apart, so the deadline case is not hidden — it stops being
+ * the question every rider is asked first.
  *
  * A native time input, so the phone supplies its own picker rather than a
  * hand-built one that behaves differently on every device (D-15).

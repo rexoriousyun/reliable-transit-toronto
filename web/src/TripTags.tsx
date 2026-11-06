@@ -142,20 +142,11 @@ export function TripTags({
     });
   }
 
-  if (rel.coverage < 0.5) {
-    tags.push({
-      id: "thin",
-      label: "Little data",
-      tone: "unknown",
-      body: (
-        <p>
-          We have enough history for <strong>{Math.round(rel.coverage * 100)}%</strong> of this
-          route. The rest has too few recorded incidents to say anything about, so the figures
-          here describe part of the trip rather than all of it.
-        </p>
-      ),
-    });
-  }
+  /* "Little data" used to be a tag here. It is now the ConfidenceBand in
+     `VerdictCard` (`D-45`) — a bar under the verdict, on every trip rather than
+     only past a threshold. A tag fires or it does not, which made a trip at 51%
+     coverage look categorically different from one at 49%; a bar shows the
+     proportion and stops pretending there is a line. */
 
   if (tags.length === 0) return null;
   const expanded = tags.find((t) => t.id === open);

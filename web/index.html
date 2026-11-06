@@ -18,6 +18,10 @@
     <meta name="theme-color" content="#1c1c20" media="(prefers-color-scheme: dark)" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icon.svg" />
+      <!-- The face is in the critical path: without the preload the browser
+         finds it only after the stylesheet parses, which is a second round
+         trip before any text is drawn in the right shape (D-43, D-36). -->
+    <link rel="preload" href="/fonts/manrope-latin-var.woff2" as="font" type="font/woff2" crossorigin />
   </head>
   <body>
     <div id="root"></div>

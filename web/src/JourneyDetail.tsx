@@ -1,18 +1,31 @@
-import { Fragment, useState } from "react";
-import { hhmm, hhmmDay } from "./clock.js";
-import type { ScoredJourney } from "./api.js";
+import { Fragment } from "react";
+import { hhmmDay } from "./clock.js";
+import type { JourneyLeg, ScoredJourney } from "./api.js";
 import { legReliabilityFor, type View } from "./view.js";
+import { ConfidenceMark, levelForCoverage } from "./Confidence.js";
 
 
 const mins = (a: number, b: number): number => Math.max(1, Math.round((b - a) / 60));
 
 /**
- * Step by step.
+ * Step by step, on a rail.
  *
  * Behind a tap, because a rider choosing between options does not need the
  * legs — they need the duration and the risk. Once they have chosen, the
  * steps are the thing they will actually follow, so they open in place rather
  * than on another screen (P-09).
+ *
+ * **The rail is the second channel.** Each leg's stroke is weighted by how much
+ * of the trip's risk it carries, so the shape of the journey — where the danger
+ * actually is — is readable before a word of it is. Walks are dashed and waits
+ * are thin: neither is a stretch we measured, and drawing them at the same
+ * weight as a scored ride would imply we had (`P-03`). A `ConfidenceMark` sits
+ * at every node, so no number on this screen appears without its certainty
+ * (`D-45`).
+ *
+ * The toggle that used to live here is gone: `VerdictCard`'s "Step by step"
+ * button now controls whether this is mounted at all, and two controls for one
+ * disclosure meant a rider could open it and see nothing.
  */
 export function JourneyDetail({
   journey,
@@ -21,14 +34,9 @@ export function JourneyDetail({
   journey: ScoredJourney;
   view: View;
 }): JSX.Element {
-  const [open, setOpen] = useState(false);
   return (
     <div className="detail">
-      <button className="why" aria-expanded={open} onClick={() => setOpen(!open)}>
-        {open ? "Hide the steps" : "Step by step"}
-      </button>
-      {open && (
-        <ol className="legs">
+      <ol className="legs">
           {journey.legs.map((l, i) => {
             // The gap between arriving and the next departure is waiting, and
             // waiting is the thing this app measures. Folding it into a leg
@@ -45,6 +53,10 @@ export function JourneyDetail({
                 {wait >= 2 && (
                   <li className="leg leg-wait">
                     <span className="leg-time" />
+                    <span className="leg-rail" aria-hidden="true">
+                      <span className="rail-node rail-unknown" />
+                      <span className="rail-line rail-line-wait" />
+                    </span>
                     <span className="leg-body">
                       <span className="leg-what">Wait at {prev!.toName}</span>
                       <span className="leg-dur">{wait} min</span>
@@ -56,6 +68,13 @@ export function JourneyDetail({
                 )}
                 <li className={`leg leg-${l.kind}`}>
                   <span className="leg-time">{hhmmDay(l.departAt, journey.departAt)}</span>
+                  <span className="leg-rail" aria-hidden="true">
+                    <span className={`rail-node rail-${nodeLevel(l, view)}`} />
+                    <span
+                      className={`rail-line rail-line-${l.kind}`}
+                      style={l.kind === "ride" ? { width: railWeight(l, view) } : undefined}
+                    />
+                  </span>
                   <span className="leg-body">
                     <span className="leg-what">
                       {l.kind === "walk" ? (
@@ -101,12 +120,36 @@ export function JourneyDetail({
           })}
           <li className="leg leg-end">
             <span className="leg-time">{hhmmDay(journey.arriveAt, journey.departAt)}</span>
+            <span className="leg-rail" aria-hidden="true">
+              <span className="rail-node rail-measured" />
+            </span>
             <span className="leg-body">
               <span className="leg-what">Arrive {journey.legs[journey.legs.length - 1]?.toName}</span>
             </span>
           </li>
-        </ol>
-      )}
+      </ol>
     </div>
   );
+}
+
+/**
+ * How heavy this leg's rail is drawn.
+ *
+ * Weighted by the share of the trip's risk it carries, so the eye lands on the
+ * stretch that matters. The threshold is the design's: above a quarter of the
+ * risk the rail thickens to 6px, and everything else stays at 2px. A leg we
+ * could not score gets the thin line rather than the thick one — unknown is not
+ * "probably fine", but it is also not evidence of danger (`P-03`).
+ */
+function railWeight(leg: JourneyLeg, view: View): number {
+  const r = legReliabilityFor(leg, view);
+  return r !== null && r.isWorst ? 6 : 2;
+}
+
+/** The certainty mark that belongs at this leg's node. */
+function nodeLevel(leg: JourneyLeg, view: View): "measured" | "thin" | "unknown" {
+  if (leg.kind === "walk") return "unknown";
+  const r = legReliabilityFor(leg, view);
+  if (r === null || r.oneInTrips === null) return "unknown";
+  return levelForCoverage(r.coverage);
 }
