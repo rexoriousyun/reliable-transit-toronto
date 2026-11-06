@@ -50,8 +50,10 @@
   --line: #2a2a31;
   --ink: #f2f2ec;
   --ink-2: #a9a9a3;
-  /* 4.6:1 on --surface-1. Do not go lighter. */
-  --ink-3: #7c7c78;
+  /* 4.6:1 on --surface-1. Do not go lighter. #7c7c78 was recorded here as
+     4.6:1 but measures 4.13:1 on --surface-1 (4.6 is against the page
+     background), which failed the floor on every form label. */
+  --ink-3: #848480;
   --inverse-bg: #f2f2ec;
   --inverse-fg: #101014;
 
@@ -96,7 +98,7 @@
   --line: #e2e2db;
   --ink: #1a1a18;
   --ink-2: #55554e;
-  --ink-3: #7d7d74;
+  --ink-3: #717168; /* 4.9:1 on --surface-1, 4.6:1 on --surface-2 (was #7d7d74, 4.15:1) */
   --inverse-bg: #1a1a18;
   --inverse-fg: #ffffff;
   --shadow: 0 -1px 0 var(--line), 0 -8px 28px rgba(0, 0, 0, 0.09);
