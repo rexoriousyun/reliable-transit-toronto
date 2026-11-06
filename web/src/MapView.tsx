@@ -67,7 +67,13 @@ export function MapView({ data, journey, fitToken, exposureProperty, onSelect, s
       style: styleUrl(),
       center: [-79.3832, 43.6532],
       zoom: 11,
-      attributionControl: { compact: true },
+      // The open data licence asks for this line wherever its data is shown;
+      // the map is where most of it is.
+      attributionControl: {
+        compact: true,
+        customAttribution:
+          'Contains information licensed under the <a href="https://open.toronto.ca/open-data-license/" target="_blank" rel="noreferrer">Open Government Licence – Toronto</a>',
+      },
     });
     m.addControl(new NavigationControl({ showCompass: false }), "top-right");
     m.addControl(new GeolocateControl({ trackUserLocation: true }), "top-right");

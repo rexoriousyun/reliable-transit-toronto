@@ -156,7 +156,7 @@ async function latestObservation(): Promise<Date> {
 
 /** Length of the observation window in months, so rates are comparable. */
 let monthsCache: number | null = null;
-async function observationMonths(): Promise<number> {
+export async function observationMonths(): Promise<number> {
   if (monthsCache !== null) return monthsCache;
   const [min, max] = await Promise.all([
     prisma.delayIncident.findFirst({ where: { minDelay: { gt: 0 } }, orderBy: { occurredAt: "asc" }, select: { occurredAt: true } }),

@@ -295,9 +295,9 @@ export async function scoreJourney(
     }
   }
 
-  const { recencyWeight, effectiveMonths, confidenceFor } = await import("./score.js");
+  const { recencyWeight, effectiveMonths, confidenceFor, observationMonths } = await import("./score.js");
   const now = await latestObservation();
-  const denominator = effectiveMonths(19);
+  const denominator = effectiveMonths(await observationMonths());
 
   // One query for every segment on the journey, grouped in memory. A query per
   // segment turned a 10ms plan into a 1.4s one.

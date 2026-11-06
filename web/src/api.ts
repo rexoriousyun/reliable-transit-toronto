@@ -373,3 +373,10 @@ export interface LiveRoutesResult {
 }
 
 export const fetchLiveRoutes = (): Promise<LiveRoutesResult> => get("/routes/live");
+
+/** The delay history's date range and publication date (`/about`). */
+export interface AboutData {
+  delays: { from: string | null; to: string | null; publishedOn: string | null; source: string };
+}
+
+export const fetchAbout = (): Promise<AboutData> => get("/about");

@@ -9,7 +9,7 @@ import { prisma } from "../db/client.js";
 import { rankRoutes } from "../domain/route-ranking.js";
 import { neverCame } from "../domain/vanishing.js";
 import { liveRoutes } from "../domain/realtime.js";
-import { recencyWeight, effectiveMonths } from "../domain/score.js";
+import { recencyWeight, effectiveMonths, observationMonths } from "../domain/score.js";
 import { registerTiles } from "./tiles.js";
 import { registerPlanner, warmGraph } from "./planner.js";
 import { stationAccessMap, endpointState, isUsable } from "../domain/accessibility.js";
@@ -186,9 +186,6 @@ app.get("/health", async (_req, reply) =>
  * equally would send most riders to an empty map. Routes are ranked by how much
  * of them we can actually speak to (P-03, P-06).
  */
-/** The observation window the score model normalises over. */
-const WINDOW_MONTHS = 19;
-
 /**
  * Which routes cost riders the most time, and why.
  *
@@ -235,7 +232,7 @@ async function buildRanking(): Promise<unknown> {
   const segById = new Map(segments.map((s) => [s.id, s]));
   const names = new Map(routes.map((r) => [r.id, r.longName || r.shortName]));
   const causes = new Map(codes.map((c) => [c.code, c.description]));
-  const denominator = effectiveMonths(WINDOW_MONTHS);
+  const denominator = effectiveMonths(await observationMonths());
 
   interface Acc { gap: number; never: number; measured: Set<string>; cause: Map<string, number>; mode: string }
   const acc = new Map<string, Acc>();
@@ -359,6 +356,42 @@ app.get("/routes/live", async (_req, reply) => {
     // would read as "nothing is running anywhere" (P-03).
     return reply.code(503).send({ error: "realtime feed unavailable" });
   }
+});
+
+/**
+ * How old the delay history is, and where it came from.
+ *
+ * Every figure on screen is drawn from this window, so a rider (and the open
+ * data licence) is owed both the dates and the source. The end is the earliest
+ * of the three modes' last records: the date by which all of them are covered.
+ */
+app.get("/about", async () => {
+  const runs = await prisma.ingestRun.findMany({
+    where: { source: { contains: "delay-data/" }, finishedAt: { not: null } },
+    orderBy: { id: "desc" },
+  });
+  const latest = new Map<string, (typeof runs)[number]>();
+  for (const r of runs) {
+    const mode = r.source.split("/")[0]!;
+    if (!latest.has(mode)) latest.set(mode, r);
+  }
+  const picked = [...latest.values()];
+  const starts = picked.flatMap((r) => (r.windowStart ? [r.windowStart.getTime()] : []));
+  const ends = picked.flatMap((r) => (r.windowEnd ? [r.windowEnd.getTime()] : []));
+  const refreshed = picked
+    .map((r) => r.notes?.match(/last_refreshed=(\d{4}-\d{2}-\d{2})/)?.[1])
+    .filter((d): d is string => d !== undefined)
+    .sort();
+  return {
+    delays: {
+      // Stored as Toronto wall-clock in UTC fields (see delays.ts), so the
+      // ISO date is already the local date.
+      from: starts.length ? new Date(Math.min(...starts)).toISOString().slice(0, 10) : null,
+      to: ends.length ? new Date(Math.min(...ends)).toISOString().slice(0, 10) : null,
+      publishedOn: refreshed.at(-1) ?? null,
+      source: "TTC delay data, Toronto Open Data",
+    },
+  };
 });
 
 app.get("/segments/:id/hours", async (req, reply) => {

@@ -285,6 +285,8 @@ select option { background: var(--surface-1); color: var(--ink); }
 .why-body dt { color: var(--ink-3); }
 .why-body dd { margin: 0; color: var(--ink-2); }
 .quiet { color: var(--ink-3); font-size: 12.5px; line-height: 1.45; margin: var(--s2) 0 0; }
+.data-note a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.data-note a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
 
 /* ---- Legend sheet -------------------------------------------------------- */
 .legend-sheet { padding-top: var(--s3); }

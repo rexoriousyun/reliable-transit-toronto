@@ -6,6 +6,7 @@ import { WalkVsWait } from "./WalkVsWait.js";
 import { DoorWalk } from "./DoorWalk.js";
 import { UsualTrips } from "./UsualTrips.js";
 import { StateCard } from "./StateCard.js";
+import { DataNote, monthYear } from "./DataNote.js";
 import { forgetTrip, recentTrips, rememberTrip, type SavedTrip } from "./recent.js";
 import type { WalkOption } from "./api.js";
 import { JourneyList } from "./JourneyList.js";
@@ -20,16 +21,26 @@ import {
   fetchRoutes,
   fetchRanking,
   fetchRouteMap,
+  fetchAbout,
   planTrip,
   type RouteSummary,
   type RouteMap,
   type Ranking,
+  type AboutData,
   type SegmentFeature,
   type ScoredJourney,
   type PlaceHit,
   type AccessWalk,
   type PlanResult,
 } from "./api.js";
+
+/** "21 months", from the delay history's own dates. */
+function historyLength(about: AboutData | null): string | undefined {
+  const d = about?.delays;
+  if (d?.from == null || d.to == null) return undefined;
+  const months = Math.round((Date.parse(d.to) - Date.parse(d.from)) / (30.44 * 86400000));
+  return `${months} months`;
+}
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -241,6 +252,12 @@ export function App(): JSX.Element {
     fetchRanking().then(setRanking).catch(() => setRanking(null));
   }, []);
 
+  /** How old the delay history is, said wherever its figures are (DataNote). */
+  const [about, setAbout] = useState<AboutData | null>(null);
+  useEffect(() => {
+    fetchAbout().then(setAbout).catch(() => setAbout(null));
+  }, []);
+
   useEffect(() => {
     fetchRoutes()
       .then((r) => {
@@ -418,17 +435,20 @@ export function App(): JSX.Element {
             /* F-02 opens on "saved trip?" and never had an interface for it.
                The list is the answer to "where are you going" more often than
                a search is, for the rider this is built for (D-44). */
-            trips.length > 0 ? (
-              <UsualTrips
-                trips={trips}
-                onOpen={(t) => { setFrom(t.from); setTo(t.to); }}
-                onRemove={(key) => { forgetTrip(key); setTrips(recentTrips()); }}
-              />
-            ) : (
-              <StateCard kind="empty" />
-            )
+            <>
+              {trips.length > 0 ? (
+                <UsualTrips
+                  trips={trips}
+                  onOpen={(t) => { setFrom(t.from); setTo(t.to); }}
+                  onRemove={(key) => { forgetTrip(key); setTrips(recentTrips()); }}
+                />
+              ) : (
+                <StateCard kind="empty" />
+              )}
+              <DataNote about={about} />
+            </>
           ) : planning ? (
-            <StateCard kind="loading" />
+            <StateCard kind="loading" detail={historyLength(about)} />
           ) : planNote !== null ? (
             <p className="answer">{planNote}</p>
           ) : journeys !== null ? (
@@ -545,6 +565,7 @@ export function App(): JSX.Element {
               <p className="quiet">
                 {when.mode === "arriveBy" ? "Arriving by" : "Leaving at"} {hhmm(when.seconds)} on a
                 weekday.
+                {about?.delays.to != null && <> Delay records to {monthYear(about.delays.to)}.</>}
               </p>
             </>
           ) : null}
@@ -589,6 +610,7 @@ export function App(): JSX.Element {
               )}
             </div>
             <div className="quiet">Minutes of waiting caused per month. Tap a line.</div>
+            <DataNote about={about} />
           </div>
         )
       )}

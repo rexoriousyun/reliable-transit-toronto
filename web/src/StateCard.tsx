@@ -37,7 +37,9 @@ function copy(kind: StateKind, detail?: string): string {
     // the rider to guess, and what they guess about a transit app is that it
     // has hung.
     case "loading":
-      return "Checking 1.2 million connections against 19 months of what actually happened…";
+      return detail === undefined
+        ? "Checking 1.2 million connections against what actually happened…"
+        : `Checking 1.2 million connections against ${detail} of what actually happened…`;
     // The feed carries no active_period, so presence in the latest snapshot is
     // the only evidence an alert is live (D-29). Past twelve hours we say we
     // could not check rather than showing nothing — silence would read as
