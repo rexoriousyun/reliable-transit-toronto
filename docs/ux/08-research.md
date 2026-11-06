@@ -124,6 +124,16 @@ using the screen.
 | ≥ 4 of 6 recover "this route wastes a lot of people's time" without help | the unit lands; keep it |
 | ≥ 3 cannot say what it means, or read it as *their own* wait | the unit fails. The model is unaffected — `D-11` stands on measurement — only the presentation moves |
 
+**If it fails, one replacement is already ruled out and one is ready to test (E-D28, D-41).**
+A percentage is not the fallback: per-trip risk has a median of 0.218%, so **74.4% of trips
+would read "0%"** and the unit a rider finds most familiar erases the whole signal. The
+candidate that survives measurement is the rider's own calendar — *"take this daily and it is
+about once every 11 months"*, spanning 2.5 to 54 months across the sample.
+
+**If Q-C fails, show the calendar framing second** and ask the same question again. Do not
+show both at once: the comparison a rider makes between two units in front of them is not the
+comprehension test this is trying to run.
+
 ### Q-G — "runs every 27 min"
 **Show:** Task 4's trip, with the fragile-wait tag open.
 
@@ -164,6 +174,20 @@ goes wrong.
 ### Q-D — compass direction
 **Observe** whether "N / S / E / W" causes a pause in Task 3. GTFS carries headsigns, so
 "towards Finch" is a cheap fix — but only worth making if it is actually a barrier.
+
+### Q-H — a transfer when it costs nothing
+**Show** two journeys of the same expected duration, one with an extra connection, and ask
+which they would take and why. `E-D26` found the ranking hands over the extra connection for
+under a minute 59.2% of the time it does so at all, with nothing breaking the tie.
+
+| Outcome | Verdict |
+|---|---|
+| most prefer fewer transfers, unprompted | `D-38`'s tiebreak is the rider's preference — accept it |
+| most are indifferent, or weigh the specific routes | it is our taste, not theirs; leave the order alone and disclose the tie |
+| they ask how tight the connection is | the slack matters more than the count, and `D-38` part 2 is the useful half |
+
+Do not show the transfer count as a number first. It is on the card already (`D-34`); the
+question is whether it changes a choice, and naming it invites agreement with it.
 
 ### The two persona assumptions
 **Captivity:** in stage 1, ask what they do when the bus does not come. If they routinely

@@ -23,7 +23,7 @@ have a route in mind is given the ones that matter rather than an alphabetical l
 
 ```mermaid
 flowchart TD
-    A[Open app] --> B[Route picker<br/>ranked by data coverage]
+    A[Open app] --> B[Route picker<br/>ranked by cost to riders - D-31]
     B --> C{Route has<br/>scored segments?}
     C -->|no| D[Route not listed<br/>404 routes qualify]
     C -->|yes| E[Coverage banner<br/>'15 of 50 have enough data']
@@ -138,6 +138,14 @@ recommends against transit is not trusted on the occasions it matters.
 
 **Scope:** downtown only. Citywide comparison would import the New York redundancy
 assumption (`D-13`).
+
+> **The scope now has a measurement behind it, not just an argument (E-D27, D-40).** Inside
+> this box a materially safer alternative exists on **12.3%** of trips and one costing five
+> minutes or less on **8.0%**; citywide those rates are **1.3%** and **0.3%**. The same
+> measurement says a *labelled* comparison — "fastest" beside "most reliable" — belongs
+> here and nowhere else, because citywide the two labels name the same journey on about 95%
+> of trips. This flow is therefore the home for reliability comparison as a feature, not
+> only for the walk decision.
 
 ---
 

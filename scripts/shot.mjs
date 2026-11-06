@@ -5,8 +5,16 @@
  *
  *   node scripts/shot.mjs      (needs the API on :3000 and vite on :5173)
  */
+import { existsSync } from "node:fs";
 import { chromium } from "playwright";
-const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
+
+// The sandbox used to ship a browser at a fixed path and no Playwright cache,
+// so the path was hardcoded. Both arrangements exist now, and a hardcoded path
+// that is missing fails with "executable doesn't exist" rather than falling
+// back — so probe, and let Playwright find its own download when the pinned
+// build is absent.
+const PINNED = "/opt/pw-browsers/chromium";
+const b = await chromium.launch(existsSync(PINNED) ? { executablePath: PINNED } : {});
 
 async function run(name, fromText, toText, opts = {}) {
   const p = await b.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
@@ -47,7 +55,7 @@ async function run(name, fromText, toText, opts = {}) {
   }
 
   // open the step-by-step detail
-  const steps = p.locator('.detail button.why');
+  const steps = p.locator('.verdict-actions button:text-is("Step by step")');
   if (await steps.count()) { await steps.click(); await p.waitForTimeout(1600); await p.evaluate(() => { const s = document.querySelector(".sheet"); s.scrollTop = s.scrollHeight; }); await p.waitForTimeout(400); await p.screenshot({ path: `/tmp/${name}-steps.png` }); await steps.click(); await p.waitForTimeout(300); }
 
   if (opts.zoom) {

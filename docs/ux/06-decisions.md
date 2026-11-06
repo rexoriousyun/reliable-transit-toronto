@@ -471,6 +471,11 @@ sheet.
 **Reversed if:** riders re-open the list on most trips, which would mean the choice is not
 settled by picking and the list should stay.
 
+> **Updated 2026-09-02 by `D-39`.** The handle reads "3 other ways" more often than "2" now:
+> the generator returns four journeys where it used to average 3.6, and they overlap less by
+> construction. The peek itself is unchanged, but `Q-E` — do riders re-open the list — is now
+> being asked of a slightly longer list than the one this decision was written against.
+
 
 ## D-21 — Rider names, not GTFS names `ACCEPTED · IMPLEMENTED`
 **Cites:** P-09, D-18 · **Problems:** PR-02
@@ -534,10 +539,17 @@ thinned, because it is a claim about measurement — walking is not.
 ## D-24 — Work backwards from the deadline `ACCEPTED · IMPLEMENTED`
 **Cites:** P-01, P-09 · **Journeys:** J-01 · **Problems:** PR-01, PR-03, PR-05 · **Evidence:** E-L03
 
-"Arrive by" is the default, not "leave at". The rider this is built for knows their arrival
-time and not their departure time — a shift, a clinic slot, a daycare that charges by the
-minute. A planner that asks for a departure time asks them to solve the problem before it
-will answer it.
+**The arrive-by *machinery* is the decision here.** The rider this is built for often knows
+their arrival time and not their departure time — a shift, a clinic slot, a daycare that
+charges by the minute — and a planner that only asks for a departure time asks them to solve
+the problem before it will answer it.
+
+> **The default moved to "leave at, now" on 2026-09-02.** Arrive-by was also the default, and
+> that part was wrong: it is the right question for the morning trip this decision was written
+> about, and not for *opening the app*, which is usually standing somewhere wanting to go.
+> Defaulting to it asked every rider to state a deadline before anything would answer. Both
+> modes are one tap apart, so nothing is hidden — the deadline stops being the toll gate.
+> Everything below is unchanged and is what makes arrive-by worth having at all.
 
 The planner searches backwards: earliest arrival is monotone in departure time, so the
 latest departure that still makes the deadline is found by bisection over the existing
@@ -1172,3 +1184,413 @@ traffic.
 
 **Reversed if:** the study turns into a product. Every one of the three above becomes a
 defect at that point.
+
+## D-38 — Break the tie on connections, and price nothing `OPEN`
+**Cites:** P-01, P-03, P-08, D-24, D-34 · **Personas:** U-02, U-04 · **Journeys:** J-01 ·
+**Problems:** PR-05 · **Evidence:** E-D26, E-D24, E-D13
+
+`PR-05` is marked `PARTIAL` and has been since it was written: each transfer is a fresh
+chance to miss a connection, and the app prices that at the stop (`D-34`) and nowhere in how
+trips are chosen or ordered. This proposes the smallest change that closes the gap, and
+explicitly refuses the larger one.
+
+**What E-D26 actually established.** Three of the four things this investigation set out to
+find were not there. The ranking is *not* transfer-blind — it preferred the transfer-heavier
+journey on 73.1% of comparable trips against a pre-registered blindness bar of 90%. Reported
+risk *rises* with transfer count rather than falling, so the unknown-as-zero mechanic in
+`composeRisk` is real but is not biasing this comparison. What survived is narrow and
+specific:
+
+- **59.2% of the time the ranking prefers more transfers, it buys under a minute** (58 of 98;
+  median saving 0.0). Expected cost ties, nothing breaks the tie, and the extra connection is
+  handed over for nothing measurable.
+- **10.2% of connections are scheduled at zero minutes** of slack, and **13.0% of trips carry
+  a connection with two minutes or less onto service running at 20 minutes or worse** — the
+  threshold `E-D24` already audited for `D-34`.
+
+**The proposal, in two parts.**
+
+1. **A tiebreak, not a weight.** When two journeys' expected door-to-door minutes fall within
+   a threshold of each other, prefer the one with fewer transfers. This adds no number to the
+   model and changes no number on screen: it decides only what a rider sees first, in the
+   case where the ranking currently has no opinion and picks arbitrarily.
+
+2. **Surface the exposed connection, using the affordance that exists.** A two-minute step
+   onto twenty-minute service is already describable with `D-34`'s vocabulary and `D-33`'s tag
+   row — the headway is a published fact, the slack is arithmetic on the schedule, and neither
+   requires an estimate. No new unit, no new scale.
+
+**What this deliberately does not do.**
+
+- **No missed-connection probability.** Estimating the chance a rider misses a two-minute
+  connection needs the distribution of arrival lateness on the incoming leg, which is exactly
+  the quantity `D-11` measured as non-persistent (rho = 0.10). Inventing it would be `P-08`'s
+  failure mode with more arithmetic in front of it, and `D-24` already refused the
+  structurally identical move for the departure buffer.
+- **No transfer penalty inside `composeRisk`.** A connection is not a segment and adding a
+  fabricated per-transfer risk to a product of measured ones would corrupt the one number in
+  this app that is traceable end to end. `D-34` drew the same line for minutes outside — *"a
+  duration, not a probability"* — and it holds in the other direction here.
+- **No re-ranking on comfort.** Fewer transfers as a *preference* is a taste we do not have
+  evidence for. It enters only as a tiebreak, where the alternative is an arbitrary choice.
+
+**The threshold is not set here, and that is deliberate.** The 59.2% that motivates this was
+counted after the distribution was seen (E-D26's standing caveat). Registering a tiebreak
+window now would be picking a number knowing which way it resolves — the renegotiation the
+audits in `src/audit/*.ts` exist to prevent. The window goes in `src/audit/transfers.ts`
+before the next measurement, not into this entry.
+
+**Why it is `OPEN` and not accepted.** Part 1 is a judgement about what a rider prefers when
+two trips cost the same, and nobody has asked one. Part 2 lands in the tag row whose
+readability is already the open question `Q-G` — *does "runs every 27 min" read as a cost or
+as a promise?* If it reads as a promise, a second tag saying "and you have two minutes to
+catch it" makes that worse rather than better. Both parts belong in the same session as
+`D-08`, which is a further reason not to fix a number now.
+
+**Reversed if:** riders shown two journeys of equal expected duration pick the
+transfer-heavier one, or are indifferent — which would say the tiebreak is our preference and
+not theirs, and that the honest ranking is the arbitrary one with the arbitrariness disclosed.
+
+## D-39 — Search wider, show fewer `ACCEPTED · IMPLEMENTED`
+**Cites:** P-06, P-09, D-14, D-20, D-36 · **Personas:** U-02, U-05 · **Journeys:** J-01 ·
+**Problems:** PR-05, PR-07 · **Evidence:** E-D27, E-D12
+
+Connection Scan answers exactly one question — earliest arrival — so every alternative has to
+come from changing the question. The generator banned each of the first three routes the best
+journey used, always from the same starting point, so every alternative was one edit away and
+a trip whose second-best answer needed two changes was never found.
+
+**Two changes, in `src/api/planner.ts`.**
+
+1. **Branch-and-ban to depth two.** Each surviving journey is expanded in turn: ban a route,
+   then ban a route of what that produced. The standard shape, and it finds the second edit.
+2. **Return the most route-diverse subset, not the top of a ranking.** A pool of six is
+   generated and four are kept, chosen greedily by lowest route overlap (Jaccard on route
+   sets) against what is already kept. The earliest arrival is always kept first; the rest
+   earn their place by being *different from it*. Four variations on one corridor is one
+   option printed four times, which is what `P-06` calls a dashboard.
+
+Citywide this lifts the share of trips carrying a materially safer alternative from 1.3% to
+**2.3%**, and one costing five minutes or less from 0.3% to **1.0%**.
+
+**Both numbers were measured, not chosen.** A sweep over pool width found the benefit peaks
+at six and *declines* past it: a deeper pool is mostly two-ban journeys that crowd out the
+single-ban alternatives a rider would consider, so twelve costs 23 ms more per request to
+find a materially safer option less often than six does (E-D27).
+
+**What it cost.** `/plan` latency p50 60.5 → **84.7 ms**, response JSON p50 69.3 → **91.8 KB**,
+journeys returned 3.57 → 4.14. That is spending against the budget `D-36` had just recovered,
+recorded here rather than absorbed quietly. The gzipped response stays inside `E-D25`'s
+13.6 KB, so the delivery win survives; the compute does not come back.
+
+**What this deliberately does not do.**
+- **No "most reliable" label.** Citywide the badge would name the same journey as "fastest"
+  95% of the time — see `D-40`, which scopes that separately.
+- **No wider pool "just in case".** The sweep says it is worse, not merely more expensive.
+- **No claim to have fixed the shortage of options.** At every pool size the median trip has
+  *zero* candidates clearing the comparison bar, because most surface segments cannot be
+  scored at all (`E-D12`). This makes the search stop being the limit; it does not make
+  coverage stop being one.
+
+**Reversed if:** the latency shows up in a rider session as hesitation on the results screen,
+in which case the pool drops back to four — the 1 point of material rate is not worth a
+screen that feels slow to `U-02` on a shelter's signal.
+
+> **Generating is not the same as offering (2026-09-02, `E-D33`).** Banning a route the best
+> trip needs returns the best trip that exists *without it*, and the diversity pick then keeps
+> that precisely because it is different. On one trip it produced a 79-minute option beside a
+> 37-minute one — full of one-minute rides wrapped in nine minutes of walking, and printing
+> the best reliability of the four because only 5% of it was measured.
+>
+> Three filters now sit between the generator and the list, and each reuses a bar this project
+> already set:
+> - **Dominated options are dropped** — slower, no safer by `MATERIAL_RATIO`, and no better
+>   measured by `MIN_COMPARABLE_COVERAGE`. All three, against a journey already kept: slower
+>   alone is not enough, because a longer trip we can actually speak for is a real choice.
+> - **A ride that costs more walking than it saves is replaced by the walk**, judged the way a
+>   rider would — is walking this stretch faster, or close enough not to matter?
+> - **A thin figure is bound to its extent** on the card: *"1 in 380 on the 38% of this route
+>   we can measure"* rather than a rate and a separate caveat underneath.
+>
+> This is `D-14`'s rule applied to the list: where there is no real alternative, the honest
+> output is one route and when to leave, not a manufactured menu.
+
+---
+
+## D-40 — Comparison is a downtown affordance, not a citywide one `OPEN`
+**Cites:** P-03, P-06, P-08, D-13, D-14 · **Personas:** U-05, U-02 · **Journeys:** J-05, J-01 ·
+**Problems:** PR-07 · **Evidence:** E-D27, E-D14, E-L12
+
+A results list labelled **fastest** and **most reliable** is the obvious next feature and the
+brief asked for it in those words. Measured, it is two labels on one journey nearly
+everywhere in the city, and a real distinction downtown.
+
+| | citywide | downtown |
+|---|---|---|
+| fastest is not the most reliable | 5.3% | 21.7% |
+| …by a margin clearing `MATERIAL_RATIO` | **1.3%** | **12.3%** |
+
+**A badge that is correct and uninformative is worse than no badge.** It appears on every
+trip, so it distinguishes nothing, and it pushes the tags that *are* rare — a closure, a
+route that does not turn up — down a row on a phone. That is the wallpaper failure
+`audit:headway` exists to prevent for `D-34`, and the same argument applies here.
+
+**So the proposal is F-03's scope, not a citywide list.** Where the measurement says choice
+is real — the downtown core, `E-D14`'s King/Queen/Dundas box, where `U-05` can also walk —
+comparison earns a place. Everywhere else the honest output is `D-14`'s: one route, when to
+leave, and when to give up.
+
+**This is the third independent argument for the same boundary.** `E-L12` had the TTC's own
+"binary" description; `E-D14` had the route-density count; `E-D27` now has the rate at which
+a materially different second option actually exists, nine times higher downtown. When three
+different measurements draw the same line, the line is probably real.
+
+**Why it is `OPEN`.** Whether a rider *wants* a labelled comparison, or reads two badges as
+the app hedging, is `Q-F`'s question wearing different clothes and has never been asked. And
+`F-03` is a flow nobody has built, so this decision is a scoping constraint on that build
+rather than a change to anything shipped.
+
+**Reversed if:** downtown riders shown the labelled list ignore the reliability label
+entirely — which would say the comparison is ours and not theirs — or the Ontario Line opens
+and gives more of the city genuine parallel capacity, the same condition `D-13` named.
+
+---
+
+## D-41 — The unit stays "1 in N" until a rider replaces it `OPEN`
+**Cites:** P-01, P-03, P-08 · **Personas:** U-02 · **Journeys:** J-01 ·
+**Problems:** PR-08 · **Evidence:** E-D28, E-D19, E-D21
+
+"Goes wrong about 1 trip in 1,206" is the most-questioned number on the screen and the
+complaint against it is fair: it discriminates well and nobody knows what to do with it.
+`Q-C` has been open on exactly this since the vocabulary was chosen.
+
+**A percentage is not the fix.** Per-trip risk has a median of **0.218%**, and **74.4% of
+scored journeys would display as "0%"** at whole-percent precision. The unit a rider finds
+most familiar is the one that erases the entire signal — the same failure `E-D19` already
+recorded against expected added minutes, arriving for a second candidate. Ruled out on
+measurement, and recorded so it is not proposed a third time.
+
+**The candidate that survives is the rider's own calendar.** At ten trips a week the same
+rates read as *once every 2.5 months* (p10) to *once every 54 months* (p90), median 10.6.
+Wide enough to act on, and it invents nothing — the measured rate over a **stated** trip
+frequency, not an assumed one.
+
+**What holds it up.** The reframe imports an assumption about how often this rider travels,
+and putting a number on that for them is the move `P-03` forbids and `D-24` already refused
+once for the departure buffer. Phrased as a conditional — *"take this daily and it is about
+once every 11 months"* — it states the arithmetic and leaves the premise visible. Whether
+that reads as helpful or as a dodge is not something we can reason our way to.
+
+**Two framings already on screen do part of the job** and should be weighed before a third is
+added: `D-28`'s benchmark verdict compares a trip with typical ones of its length without
+using a number at all, and `D-34` prices a missed vehicle in minutes, which is a unit nobody
+has ever had to explain.
+
+**Reversed if:** riders read the calendar framing as a promise about their next trip rather
+than a rate — the failure mode `D-24` was rewritten to avoid and `Q-G` is already watching
+for in `D-34`'s headway.
+
+---
+
+## D-42 — Dark is the default; light is a choice `ACCEPTED`
+**Cites:** P-06, D-15, D-18 · **Personas:** U-02 · **Journeys:** J-01, J-02 ·
+**Problems:** PR-13 · **Evidence:** E-L11, E-D25 · **Source:** design upgrade, 2026-09-02
+
+The app followed the system theme. It now defaults to dark, with light available as an
+explicit choice rather than as an inherited one.
+
+*Why:* the rider this is built for is **outdoors**, at a stop, often at dusk or in the dark —
+`PR-13` is the finding that in winter an unexplained wait is a safety problem, and `E-L11`
+is the 100 heated shelter kits over seven years that say nobody is fixing the stop. A screen
+that matches the surroundings is easier to read one-handed at arm's length, and the
+map-as-ground treatment `D-20` commits to only holds together on a dark base.
+
+Following the system was never a decision; it was the absence of one.
+
+**Reversed if:** riders report the dark map is harder to read than light in daylight, which
+is the case this trades against and the one condition that would make it wrong.
+
+## D-43 — One display face, self-hosted `ACCEPTED`
+**Cites:** P-09, D-18, D-36 · **Evidence:** E-D25 · **Source:** design upgrade, 2026-09-02
+
+**Manrope**, weights 400/500/600/700/800, self-hosted as a subset woff2. No runtime request
+to Google Fonts.
+
+**This relaxes a rule, and the rule should be named correctly.** `01-system.md` puts *"no
+decorative faces — system UI stack"* under **Type**, and derives it from **rule 4** (look
+trustworthy, nothing casual or decorative), not from rule 3 as the handoff records it. The
+argument for relaxing it is that the system stack renders as three different products across
+iOS, Android and desktop, and a forecast that changes shape by platform reads as less
+trustworthy, not more. One face, no decoration, is still rule 4 — it is the *same* argument
+reaching a different answer once the product has numbers as its subject.
+
+**Self-hosted is the load-bearing half.** A Google Fonts request is a third-party round trip
+before first paint, which is exactly the cost `D-36` spent a milestone removing for a rider
+on a shelter's signal.
+
+**Reversed if:** first paint on slow 4G regresses past `D-36`'s 2.2 s. The font is not worth
+a rider's second — measure before believing the subset is small enough.
+
+> **The kill condition fired, and the font is not why (2026-09-02, `E-D30`).** Slow 4G first
+> paint is **2,576 ms** against the 2,200 ms bar. Blocking the woff2 gives 2,516 ms, so the
+> face costs **64 ms** of a 438 ms regression; the rest is everything else this upgrade added.
+> Reverting `D-43` would recover 64 ms and still be over budget, so the decision stands and
+> the *breach* is carried openly rather than resolved by removing the cheapest suspect.
+>
+> The remedy is known and measured: moving MapLibre behind a dynamic import took slow 4G to
+> **1,192 ms**, better than the figure `D-36` set. It was reverted the same day because it
+> broke the map — the worker stopped resolving and the canvas went blank without throwing.
+> That is the open task, and it is now well specified.
+
+## D-44 — Saved trips are local, and there are no accounts `ACCEPTED`
+**Cites:** P-06, P-09 · **Personas:** U-02 · **Journeys:** J-01 ·
+**Problems:** PR-14 · **Source:** design upgrade, 2026-09-02
+
+`localStorage`, maximum five, most recent first. No sign-in, no sync, no server-side record
+of where anybody travels.
+
+*Why:* `F-02` opens with a "saved trip?" branch that has never had an interface, and the
+same rider takes the same trip most days — re-entering it every morning is the cheapest
+friction in the product. An account would collect a home address and a commute pattern to
+save four taps, and `PR-14` already records that this product's audience is the part of the
+city least well served by asking for more.
+
+**Reversed if:** riders ask to carry trips between devices, which is the one thing local
+storage cannot do and the only reason to reconsider an account.
+
+## D-45 — One confidence mark, everywhere `ACCEPTED`
+**Cites:** P-03, P-09, D-26 · **Evidence:** E-D12 · **Source:** design upgrade, 2026-09-02
+
+A single mark, used on map lines, tags, list rows, search hits and beside every number:
+
+| mark | meaning |
+|---|---|
+| ● solid | measured |
+| ○ hollow | thin data — the figure is a floor, not a total |
+| ◌ dashed | unknown |
+
+**This closes a defect the concept doc has carried open since 2026-08-28.** Confidence was
+expressed three different ways — a dashed map line, a dashed tag border, and a sentence — so
+the rider had to learn three vocabularies for one idea. `D-26` established that unknown is a
+separate categorical state and never a stop on the ramp; this makes that state legible in the
+same shape wherever it appears.
+
+`E-D12` is why it matters more here than in most products: 3.1% of segments reach high
+confidence, so the mark is not an edge case, it is most of the map.
+
+**Reversed if:** `Q-A` finds that marking every number makes the interface read as broken
+rather than as honest — the same risk the hatched map carries, now applied to text.
+
+## D-46 — Motion only where it carries meaning `ACCEPTED`
+**Cites:** P-09, D-18 · **Source:** design upgrade, 2026-09-02
+
+Four moves, and everything else is instant:
+
+| move | duration | what it says |
+|---|---|---|
+| sheet reveal | 240 ms | the answer arrived, and here is the route it describes |
+| band fill | 400 ms | this much of the trip is actually measured |
+| card → map | 300 ms | *this* stretch is the one being talked about |
+| gap counter | 200 ms crossfade | the number changed |
+
+**The counter crossfades and never rolls.** Rolling digits imply a live countdown, which is
+the ghost-bus pattern `PR-08` says riders have already learned to distrust and `D-24` was
+rewritten to avoid. The motion has to not make a promise the data cannot keep.
+
+`prefers-reduced-motion` collapses all four to a 120 ms opacity change.
+
+**Reversed if:** any of the four is measured slowing a rider down rather than orienting them
+— motion that has to be waited through is decoration, which `D-18` rules out.
+
+---
+
+## D-47 — Say which routes are moving, never when the bus arrives `ACCEPTED · IMPLEMENTED`
+**Cites:** P-02, P-03, P-08 · **Personas:** U-02 · **Journeys:** J-02 ·
+**Problems:** PR-01, PR-08 · **Evidence:** E-D29, E-D23
+
+The realtime feed is consumed at **route level only**: how many vehicles are currently
+reporting on each route a trip uses. No countdown, no next-arrival time, no stop board.
+
+**Because the feed cannot be joined to our stops.** `E-D29` measured it: 1 trip id in 2,301
+matches the schedule, and the stop ids collide *coincidentally* — 59% of them exist in our
+table and return the wrong routes. Feed stop `6857` yields Scarborough routes for a stop on
+Queen St West. A countdown built on that is wrong at more than half of all stops and looks
+entirely normal, which is the precise failure `PR-08` says riders have already learned to
+expect from transit numbers.
+
+**Route ids match 180 of 181, so the smaller question is answerable.** "Is anything running
+on the 31?" is not a lesser version of "when is my bus" — `E-D23` measured that 36.1% of all
+rider-waiting is a vehicle that never came, and 74% of it on that route. A rider at that stop
+is not asking for a countdown. They are asking whether to keep waiting.
+
+**Absent is unknown, never zero.** The feed carries surface routes; the subway is not in it,
+and a route with nothing running does not appear rather than appearing at zero. The interface
+says *"can't see the 31"* and never *"0 running"* — those are opposite facts and printing one
+for the other is `P-03`'s failure with a live feed attached.
+
+**Fetched per request with a 15-second memo, never stored.** An alert is true for hours and is
+ingested to SQLite; a vehicle position is true for seconds. Writing these to a table would
+guarantee every read is stale by however long since the last ingest.
+
+**Reversed if:** a crosswalk between BusTime stop ids and GTFS stop ids becomes available from
+either publisher — at which point `J-02`'s countdown is unblocked and this becomes the
+fallback rather than the answer.
+
+---
+
+## D-48 — A trip starts at a door, not at a stop `ACCEPTED · IMPLEMENTED`
+**Cites:** P-03, P-06, P-08 · **Personas:** U-02, U-04, U-05 · **Journeys:** J-01 ·
+**Problems:** PR-05, PR-13 · **Evidence:** E-D31
+
+`from` and `to` were GTFS stop ids, so every trip began at a stop the rider was assumed to
+already be standing at. The first and last mile were invisible, and **every door-to-door
+figure on screen was short by however long they take** — 6 minutes on a plain example, and
+more in the inner suburbs where stops are sparse and `U-02` lives.
+
+A rider can now type **487 Lauder Ave**.
+
+**Toronto's own address points, not a geocoding API.** 525,470 of them, from the One Address
+Repository on the same CKAN portal the delay data comes from. The whole project runs on
+public Toronto Open Data and the TTC feed with no key anywhere, and putting a rate-limited
+third party in the request path would be a new way for the app to fail at a bus stop.
+
+**The nearest stop is the wrong answer, so it is not the one used.** Every stop within 1.2 km
+is seeded into a single Connection Scan at the time the rider could be standing there, and
+the timetable decides. On the worked example that picks Oakwood Ave at 334 m over Dufferin St
+at 289 m, because the service at Oakwood leaves sooner. Snapping to the nearest stop would
+have chosen a route going the wrong way.
+
+**One scan, not one per candidate.** Seeding costs nothing extra, and the far end is free: a
+scan already computes arrival at every stop, so choosing between candidate destinations is a
+comparison over results — arrival plus the walk to the door.
+
+**What it deliberately does not do.**
+- **No snapping when a rider picked a stop.** Coordinates are sent only for an address. A
+  rider who chose Union Station meant Union Station, and re-resolving it to "somewhere within
+  1.2 km" answers a question they did not ask.
+- **No invented precision.** Distances are straight-line, so every walking figure is a floor.
+  The interface says *"about 4 min"* and never a flat minute (`P-03`).
+- **No silent rounding of an address.** A house number we do not hold resolves to the nearest
+  one we do, and that is **marked** — rounding somebody's home to the neighbour's without
+  saying so is exactly the small dishonesty this product exists to refuse.
+- **No claim the walk is pleasant.** Weather, luggage and mobility are not data we hold.
+
+**Reversed if:** riders enter addresses and then discover the walk is wrong often enough to
+distrust the trip — the straight-line floor is the weak point, and a real walking network
+(the Toronto Centreline is on the same portal) is the fix rather than a retreat to stops.
+
+> **Three corrections, 2026-09-02, from reading one trip (`E-D32`).**
+> - **The headline now reports arrival at the door.** It said "There by 18:17" on a trip whose
+>   walk ended at 18:21 — the verdict, the benchmark and the option cards were all still
+>   stop-to-stop while the sheet above them said "door to door".
+> - **Candidate stops are the whole radius, not the nearest six.** Six excluded every station:
+>   75 stops sat within 1.2 km of one door and the nearest LRT station ranked 54th, so the
+>   planner could not consider alighting from the train and walking, and rode a bus two
+>   minutes at a cost of eight to save nothing.
+> - **Walking carries a 1.3 detour factor.** Straight-line is a floor, and the error grows
+>   with distance, so long walks were flattered and the choice of alighting stop was biased.
+>
+> `D-38`'s tiebreak is now implemented for this one case: where two ways to the door finish
+> within `TIE_SECONDS` of each other, the one with fewer rides wins. The threshold is sized to
+> the uncertainty in our own walking estimate rather than tuned — resolving a margin smaller
+> than our error with an extra bus ride is the false precision `P-08` refuses.

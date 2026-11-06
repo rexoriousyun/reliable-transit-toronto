@@ -18,10 +18,12 @@ anchor for what the project is, where it stands, and what is open.
 
 ```bash
 npm run ingest            # TTC open data + GTFS -> SQLite, builds segments, attributes, geometry
+npm run ingest:addresses  # just the 525k municipal address points (183 MB CSV, streamed)
 npm run audit:gap         # M2 gate — is Min Gap trustworthy? (pre-registered thresholds)
 npm run audit:stability   # does segment reliability persist? (rho > 0.5 on exposure)
 npm run audit:coverage    # surface geocoding rate vs the 66.1% baseline
 npm run audit:headway     # is "runs every N min" discriminating, or wallpaper? (D-34)
+npm run audit:transfers   # does a transfer cost anything in the ranking? (PR-05, D-38)
 npm run check:diagrams    # every mermaid block parses — GitHub fails one silently
 npm run data              # ingest -> precompute -> benchmark. Re-run all three together
 npm run build && npm start  # production shape: compiled server serving web/dist
@@ -120,6 +122,14 @@ line you are running. Use `fuser -k -n tcp 3000` instead.
 **The TTC portal publishes double-encoded text.** Delay-code descriptions arrive as UTF-8
 bytes that already encode mojibake (`c3 a2 c2 80 c2 93` for an en-dash). Decoding correctly
 is not enough — the extra encoding round must be undone. See `repairMojibake`.
+
+**`color-scheme: dark light` hands native controls back to the system.** The two-value form
+says the page *supports* both and lets the OS pick, so on a machine set to light Chrome painted
+the `<select>` and its popup light while `D-42` painted everything around them dark — an
+invisible dropdown, on a page whose own theme is explicit. Dark is this app's choice, not the
+system's, so `:root` states one value (`dark`) and `[data-theme="light"]` states the other.
+`option` elements also need their own colours: the popup is drawn by the browser and does not
+inherit page tokens.
 
 **MapLibre: `zoom` may only feed a top-level `step`/`interpolate`.** A per-feature factor
 cannot wrap the ramp; put it inside each stop's output instead.
@@ -252,9 +262,37 @@ only symptom would be a slower boot nobody investigates. Hash the content; 36 MB
 of a 185 KB response that the client does not declare, does not read, and already has in
 another encoding as `geojson`. Name the fields you mean to send.
 
+**`streets.ts` strips N/S/E/W anywhere in a name, which is right for intersections and wrong
+for addresses.** It keyed "North Queen St" as `QUEEN`, so "100 Queen St West" geocoded to 100
+North Queen St — a different street 12 km away, with nothing on screen to show for it.
+`geocode.ts` has its own key that keeps every word and treats only a *trailing* direction as
+identity. Two normalisers, on purpose; do not merge them.
+
 **Never prettify a name on the path into a lookup.** `displayStopName` runs on the way to
 the screen only. Scoring keys on the raw GTFS name because the segment index was built from
 it — the same shape of mistake that pinned journey coverage at 7.7%.
+
+**A ratio whose numerator and denominator increment on the same line can only report 100%.**
+`if (fewer) { comparable++; rankedMore++; }` measured nothing and reported "46 of 46 — the
+ranking never prefers the simpler trip", which is exactly the kind of unanimity that should
+be suspicious. The pre-registered audit put the real figure at 73.1%. **Before believing a
+measurement that came out clean, check the counters can actually disagree.**
+
+**`Journey` carries no `id` — the API adds one when it serialises.** Comparing candidates
+off-server with `a.id !== b.id` compares `undefined` with `undefined`, which is `false`, so
+every difference vanishes and the script reports perfect agreement. Caught only because 43%
+pair-concordance and "0% differ" cannot both be true. Compare by reference, or by a field
+that exists at the layer you are in.
+
+**A scan is cheap on a short trip and not on a long one.** `plan()` timed at 0–4 ms against
+three downtown pairs, which made "generate a wide pool, it's free" look obvious; on a
+citywide sample a pool of twelve measured 125.6 ms p50, worse than returning six. Time the
+population you will run on, not the example you had to hand.
+
+**More candidates can find fewer good ones.** Widening the alternatives pool past six *lowers*
+the rate at which a materially safer option is found, because the extra journeys ban two
+routes at once and crowd out the single-ban alternatives in the diversity pick. Sweep the
+parameter; do not assume a search knob is monotone.
 
 ---
 
@@ -262,9 +300,12 @@ it — the same shape of mistake that pinned journey coverage at 7.7%.
 
 Named so they are not silently carried:
 
-- **GTFS-Realtime alerts are consumed for elevators and for route disruptions; trip updates
-  and vehicle positions are not.** J-02 (at-stop) and J-03 (mid-trip) need the latter two —
-  M11 serves J-01's "is today unusual" stage only.
+- **GTFS-Realtime is consumed for alerts, and at route level for live vehicles.** A
+  stop-level countdown is not possible: the `bustime.ttc.ca` feeds use a different identifier
+  space from the static GTFS — 1 trip id in 2,301 matches, and stop ids collide by
+  coincidence so the obvious join is silently wrong at over half of all stops (`E-D29`).
+  Route ids match 180 of 181, which is what `D-47` builds on. J-02 and J-03 stay blocked on a
+  crosswalk neither publisher provides.
 - **Alerts carry no `active_period`.** Presence in the latest snapshot is the only evidence
   an alert is live, so the app reports the snapshot's age and stops claiming to know past
   twelve hours. Silence would read as "nothing is wrong today".

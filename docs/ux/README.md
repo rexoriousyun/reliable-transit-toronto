@@ -43,12 +43,18 @@ Evidence (E-*) -> Problem (PR-*) -> Principle (P-*) -> Decision (D-*) -> Impleme
 
 ## Status
 
-*Updated 2026-08-29.*
+*Updated 2026-09-02.*
 
-Seeded 2026-08-28 from the data investigation in `01-evidence.md`. **35 decisions, 9
+Seeded 2026-08-28 from the data investigation in `01-evidence.md`. **41 decisions, 9
 principles, 14 problems, 3 personas, 5 journeys and 4 flows**, each traceable to the
 measurement that produced it. Two audits reversed the design they were written to confirm,
 and both reversals are still in the log.
+
+Three of the newest decisions (`D-39`–`D-41`) came from a single question — should the
+planner show *fastest* and *most reliable* as separate options — and only one of them says
+yes to anything. The other two record what measurement ruled out: a citywide comparison
+label, and a percentage as the risk unit. `E-D26` additionally keeps a claim that **failed**
+its own pre-registered test, along with the counting bug that produced it.
 
 Personas remain **provisional** — derived from published research and our own delay
 analysis, not yet from interviews with Toronto riders. Validating them is `D-08`, and it is

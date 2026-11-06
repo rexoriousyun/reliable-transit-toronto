@@ -1,7 +1,7 @@
 # Product Plan — v1
 
 **Status:** v1 scope complete, unvalidated · **Written:** 2026-08-28 ·
-**Updated:** 2026-08-29 · **Supersedes:** nothing
+**Updated:** 2026-09-02 · **Supersedes:** nothing
 
 Assembled from decisions already made in `docs/ux/06-decisions.md`. This document adds
 no new product direction — it makes existing decisions legible as scope, sequence and
@@ -20,7 +20,7 @@ realtime feed.**
 | **Primary metric** | Headway gap, not vehicle delay (`D-02`) |
 | **Journeys served** | J-01 pre-trip departure advice, J-04 exploratory segment map (`D-03`) |
 | **Network** | Engine developed on subway, **released covering buses** (`D-04`) |
-| **Realtime** | Alerts only — route disruptions (`D-29`) and elevator outages (`D-30`). Trip updates and vehicle positions are not fetched. Everything ranked is historical. |
+| **Realtime** | Alerts (`D-29`, `D-30`) plus which routes are moving now (`D-47`). A stop countdown is not possible — the feed is a different id space (`E-D29`). Everything *ranked* is historical. |
 
 ### The one-sentence test
 *"Show me which parts of my trip are actually unreliable, and when I should leave."*
@@ -144,7 +144,7 @@ only. Multi-agency comes later or never (`E-M01`: Reroute already does it).
 | Surface coverage | > 66% of delay-minutes geocoded | **MET: 76.6% raw, 80.6% addressable** (E-D11) |
 | Honest uncertainty | 100% of low-sample segments marked, none rendered as healthy | `P-03` |
 | Rider validation | 5+ riders confirm a segment we flagged matches their experience | **NOT MET — the only one outstanding.** `D-08`, `P-08`. Protocol written: `docs/ux/08-research.md` |
-| Trip planning | A→B on the TTC returns plausible itineraries within 1s | **MET: 6–12 ms warm**, ~6 s to build the graph on first request |
+| Trip planning | A→B on the TTC returns plausible itineraries within 1s | **MET: `/plan` p50 84.7 ms, p90 124.2 ms** end to end, graph warmed at boot (`D-36`, `D-39`) |
 
 ---
 
@@ -156,9 +156,9 @@ never a building problem.
 | | |
 |---|---|
 | **Built** | J-01 (pre-trip) and J-04 (exploratory) in full, plus the half of J-02 the timetable alone can answer (`D-34`) |
-| **Not built, blocked on a feed** | J-02's countdown and J-03 — GTFS-RT trip updates and vehicle positions are not fetched at all |
-| **Not built, blocked on nothing** | J-05, wait against walk. The headway is computed and a walking time is geometry; it is unbuilt because U-05 is not primary |
-| **Blocked on a rider** | everything else. Seven questions, all pre-registered |
+| **Not built, blocked on a crosswalk** | J-02's countdown and J-03. Both realtime feeds are fetched; their stop and trip ids are a different id space from the schedule (`E-D29`), so only the route-level signal is sound (`D-47`) |
+| **Not built, blocked on nothing** | J-05, wait against walk — and, on the same screen, the labelled reliability comparison `D-40` scopes there. The headway is computed and a walking time is geometry; it is unbuilt because U-05 is not primary |
+| **Blocked on a rider** | everything else. Eight questions, all pre-registered |
 
 The honest summary: **the product has run out of things it can learn from its own data.**
 Two audits reversed designs they were written to confirm, which is the system working — but

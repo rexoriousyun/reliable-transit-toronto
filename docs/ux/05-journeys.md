@@ -165,7 +165,10 @@ and D-34 took the part of J-02 that the timetable alone can answer. What remains
 feed is genuinely behind it.
 
 **J-02's countdown and J-03 are the two real gaps,** and they are deliberate: both need GTFS-RT
-trip updates and vehicle positions, which are not fetched at all. The correctness bar is also
+stop-level arrivals, which this realtime feed cannot give: its stop and trip ids are a
+different identifier space from the schedule (`E-D29`), so a countdown built on the obvious
+join is silently wrong at over half of all stops. Route-level *"is anything running"* is
+built instead (`D-47`). The correctness bar is also
 higher there — a wrong number at a stop in January is worse than no number.
 
 **J-05 is unbuilt and is the cheapest of the three.** Wait against walk needs no feed to be

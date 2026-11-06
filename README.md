@@ -44,4 +44,15 @@ are zero-minute non-events. See `docs/ux/01-evidence.md`.
 
 ## Status
 
-Research and UX foundation complete. Implementation not started.
+**Built.** Every milestone `M0`–`M12` ships: ingestion, the segment reliability model, the
+routing engine, reliability ranking, departure advice, day-of disruptions, step-free routing,
+and a mobile-first app that plans a trip and explores a route. Six audits run with
+pre-registered thresholds, 171 tests pass, and the whole thing runs as one container.
+
+What is **not** done is validation. Every persona is provisional — derived from published
+research and our own delay data, never from talking to a Toronto rider — and eight
+pre-registered questions are waiting on sessions that have not happened (`D-08`,
+`docs/ux/08-research.md`). It has also never been deployed: the image is built and verified
+locally, but `fly deploy` needs an account.
+
+`docs/STATE.md` is the anchor and is kept current.

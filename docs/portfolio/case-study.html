@@ -689,6 +689,16 @@ footer {
       re-reading the brief, superseded, and kept in the log with the error visible.</li>
       <li><strong>I proposed a feature before measuring the thing it was for.</strong> The night
       case above. The audit that corrected it took twenty minutes and should have come first.</li>
+      <li><strong>I trusted a measurement because it agreed with me.</strong> Checking whether
+      transfers were priced anywhere in the product, a quick script reported that the ranking
+      preferred the more-complex trip on <strong>46 of 46</strong> comparable journeys. It was a
+      bug: the counter for "a simpler option existed" and the counter for "we chose the transfer
+      anyway" were incremented on the same line, so the ratio could only ever be 1.0. The
+      pre-registered audit put it at <strong>73.1%</strong> — under the bar I had set for calling
+      the ranking transfer-blind, which means the charge I was about to write up was false.
+      Unanimity should have been the tell. Kept in the evidence log rather than quietly corrected,
+      because the near-miss is the point: registering the threshold <em>before</em> measuring is
+      what caught it, not my own review.</li>
     </ul>
   </div>
 </section>
@@ -698,7 +708,7 @@ footer {
   <div class="body">
     <h2>Where it stands</h2>
     <p>A working reliability engine over public data with no API keys, a mobile-first trip planner
-    that ranks routes by what actually happens, five reproducible audits with thresholds
+    that ranks routes by what actually happens, six reproducible audits with thresholds
     pre-registered in the source, 171 tests, and a decision record explaining every choice and what
     would reverse it.</p>
     <p><strong>Every success criterion is met except one.</strong> Rider validation is outstanding,
@@ -710,7 +720,7 @@ footer {
     rider this product was not built for.</p>
 
     <div class="pull">The most valuable output is not the interface. It is knowing which half of the
-    original hypothesis was true — and having the trail to prove it, including the six times I was
+    original hypothesis was true — and having the trail to prove it, including the seven times I was
     the one who turned out to be wrong.</div>
   </div>
 </section>

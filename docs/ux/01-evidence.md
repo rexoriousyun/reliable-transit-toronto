@@ -795,3 +795,401 @@ standing at a stop in winter on whatever signal the shelter gets, and `PR-14` re
 66.6% of TTC riders are equity-deserving and pay per ride because they cannot front a monthly
 pass. Seven seconds of blank screen, and a quarter-megabyte of their data, are product
 failures rather than engineering details.
+
+## Added 2026-09-01 (what a transfer costs)
+
+### E-D26 — A transfer is priced at the stop and nowhere else
+*Measured 2026-09-01 · `npm run audit:transfers` · thresholds pre-registered in `src/audit/transfers.ts`*
+
+`PR-05` has said since the first pass that each transfer is a fresh chance to miss a
+connection and that variance compounds rather than averages out. `D-34` acted on half of
+it — every wait now carries the headway behind it, so a rider standing at a stop can read
+what one no-show costs. Nothing acted on the other half: whether a trip carrying three of
+those should rank below a trip carrying none. This measures the planner's own output, at the
+benchmark's four departure times and with its service-weighted origin draw, so the sample
+describes the trips a rider is offered rather than the shape of the graph.
+
+**400 trips, 1,089 connections. 88.5% of top-ranked results carry at least one transfer.**
+
+**1. A transfer contributes nothing to the risk number.** This is structural, not
+statistical. `composeRisk` is `1 - Π(1 - risk)` over the *segments a journey rides*
+(`itinerary.ts`). Connections are not terms in that product. Two journeys over identical
+segments score identically at zero transfers and at three. Whatever the number on the card
+means, it does not mean "and this many chances to miss a connection".
+
+**2. The connections it picks are tight, and one in ten has no slack at all.**
+
+| scheduled slack at a connection | p10 | p50 | p90 |
+|---|---|---|---|
+| minutes | **0** | **2** | 6 |
+
+**111 of 1,089 connections (10.2%) are scheduled at zero minutes** — step off, step on. This
+is not a defect so much as the objective working as written: Connection Scan minimises
+arrival time, which is precisely the criterion that selects the tightest legal transfer
+available, and `MIN_TRANSFER_S = 60` puts "legal" one minute above impossible.
+
+**55 connections, on 52 trips (13.0%), are tight *and* exposed** — two minutes or less of
+slack onto service running at 20 minutes or worse, the threshold `E-D24` already audited for
+`D-34`. Miss one of those and the trip grows by more than the entire margin the ranking was
+optimising.
+
+**3. The ranking hypothesis did not survive its own test.** The pre-registered claim was that
+the sort — `durationMinutes + expectedAddedMinutes`, where the second term measured 0.03–0.09
+minutes on live trips — is transfer-blind in practice, and would be shown so if it preferred
+the transfer-heavier journey on more than 90% of trips where a simpler alternative existed.
+
+**It preferred it on 73.1% (98 of 134). The test passes; the ranking does discriminate.**
+
+Recording the failure because the first version of this finding was wrong in a way worth
+keeping visible. A throwaway script reported 46 of 46 — apparent unanimity — and it was
+tautological: the counter for "had a simpler option" and the counter for "chose the transfer
+anyway" were incremented on the same line, so the ratio could only ever be 1.0. The number
+was not measured, it was constructed. The pre-registered audit is the only reason that did
+not become a decision.
+
+**4. Reported risk rises with transfer count, and the opposite was expected.**
+
+| transfers | n | median 1 in N | median coverage |
+|---|---|---|---|
+| 0 | 46 | *unmeasured* | **0.00** |
+| 1 | 123 | 1 in 1,206 | 0.13 |
+| 2 | 119 | 1 in 598 | 0.18 |
+| 3 | 67 | 1 in 355 | 0.20 |
+| 4 | 33 | 1 in 281 | 0.32 |
+| 5 | 9 | 1 in 146 | 0.26 |
+| 6 | 3 | 1 in 145 | 0.10 |
+
+The suspicion going in was that unknown legs enter `composeRisk` as `risk = 0` — a perfect
+leg — and that since more transfers means more thinly-covered surface legs (`E-D12`), the
+composed number would quietly fall as trips got more complex. It does the reverse: more
+transfers means more segments means more risk terms, and coverage *rises* with transfer count
+rather than falling. A single anecdote suggested otherwise and the population does not.
+
+The unknown-as-zero mechanic is still real — an unscored leg genuinely is indistinguishable
+from a perfect one inside that product — it simply is not what drives this comparison.
+
+**The row that should be read twice is the first one. A zero-transfer trip has median
+coverage 0.00** — the direct single-route journey is usually a surface route we cannot score
+at all, so the simplest trip on offer is the one we know least about. That is `P-03`
+territory and it is not what the transfer question was looking for.
+
+*Why it matters:* the useful finding is the narrow one. The ranking is not blind, and the
+risk model is not biased toward complexity — but **59.2% of the time it prefers the
+transfer-heavier journey, it buys less than one minute** (58 of 98; median saving across all
+98 is 0.0 minutes, p90 11.9). Expected cost ties, and nothing breaks the tie, so a rider is
+handed an extra connection — 13% of the time a two-minute step onto twenty-minute
+service — in exchange for nothing measurable. That is a tiebreak that was never specified,
+not a weighting that was got wrong, and it is a far smaller claim than the one this
+investigation started with.
+
+*Standing caveat:* that 59.2% figure was counted after the distribution had been seen. It
+carries no verdict in the audit and decides nothing on its own; a decision resting on it
+needs its own threshold registered before the next measurement.
+
+### E-D27 — How much choice exists, and what a wider search buys
+*Measured 2026-09-01 · in-process against the planner · seed 20260901, the benchmark's
+service-weighted origin draw and four departure times, 300 trips per configuration*
+
+`D-14` says the router **adapts its answer to how much choice actually exists**, and
+`D-13`'s surviving note says comparison is a downtown feature. Neither had been measured.
+The question is whether a "fastest / most reliable" split is a real distinction or two
+labels on the same journey.
+
+Comparisons use the project's own bars: `MIN_COMPARABLE_COVERAGE` (0.5) to decide a journey
+can be compared at all, and `MATERIAL_RATIO` (1.25) to decide a difference is worth acting
+on. Both were set for other purposes before this question was asked.
+
+**Citywide, the split is almost never real.**
+
+| | citywide | downtown core |
+|---|---|---|
+| trips with ≥2 comparably-measured options | 15.3% | **38.3%** |
+| fastest is not the most reliable | 5.3% | **21.7%** |
+| …and the gap clears `MATERIAL_RATIO` | **1.3%** | **12.3%** |
+| …and costs ≤5 extra minutes | 0.3% | **8.0%** |
+| risk ratio when they differ (p50) | 1.13× | **1.34×** |
+
+Downtown is the King/Queen/Dundas box from `E-D14`, 516 boardable stops. A permanent
+"most reliable" badge would sit on the same card as "fastest" on roughly 95% of citywide
+trips, and where it differed the gap would be below the project's own materiality bar four
+times in five — the median 1.13× against a 1.25 threshold. Downtown it is a real feature:
+one trip in eight has a materially safer option and one in twelve has one costing five
+minutes or less.
+
+**This reproduces, from data, a claim the foundation had only ever asserted.** `E-L12` took
+"Toronto has no redundancy" from the TTC CEO's own words. The rate at which a second
+genuinely different option exists is nine times higher downtown than citywide, which is the
+same statement measured rather than quoted.
+
+**A stronger search helps, and is not what was limiting.** The generator banned each of the
+first three routes the best journey used, all from one starting point, so every alternative
+was one edit away. Replacing it with branch-and-ban to depth two, then returning the most
+route-diverse subset, was swept over pool width:
+
+| pool / returned | journeys | search ms (p50) | ≥2 comparable | material | and ≤5 min |
+|---|---|---|---|---|---|
+| 4 / 4 *(before)* | 3.42 | 18.6 | 15.3% | 1.3% | 0.3% |
+| **6 / 4** | **3.76** | **31.8** | 15.3% | **2.3%** | **1.0%** |
+| 8 / 4 | 3.76 | 43.3 | 13.0% | 2.0% | 0.7% |
+| 12 / 4 | 3.76 | 54.8 | 11.3% | 2.0% | 0.7% |
+| 6 / 6 | 5.07 | 31.9 | 19.3% | 2.0% | 1.0% |
+
+**Searching wider makes it worse past six, which was not the expectation.** A deeper pool is
+mostly journeys reached by banning two routes at once; they crowd out the single-ban
+alternatives a rider would actually consider, so the diversity pick has more to choose from
+and chooses less well. Twelve costs 23 ms more per request to find a materially safer option
+*less* often than six.
+
+**The binding constraint is coverage, not search.** At every pool size the median trip has
+**zero** candidates clearing the comparison bar. That is `E-D12` — 3.1% of segments at high
+confidence — arriving at the journey level. Doubling the search doubles a rate that starts
+near one percent; it cannot manufacture a comparison out of segments that were never scored.
+
+**What the change cost**, measured end to end on 138 live trips through the server:
+
+| | before | after |
+|---|---|---|
+| journeys returned (mean) | 3.57 | 4.14 |
+| `/plan` latency p50 / p90 | 60.5 / 102.3 ms | 84.7 / 124.2 ms |
+| response JSON p50 / p90 | 69.3 / 138.0 KB | 91.8 / 149.2 KB |
+
+24 ms and 22 KB, spent against the budget `D-36` had just recovered. Gzipped the sampled
+trip is 8.8 KB, still inside `E-D25`'s 13.6 KB, so the delivery win survives — but the
+endpoint is measurably slower and the trade is recorded rather than absorbed. See `D-39`.
+
+*A wrong turn worth keeping.* The first implementation generated a pool of twelve on the
+assumption that a scan is cheap — it is, on the short trips it was timed against, and is not
+on the long ones a citywide sample is full of. That version measured **125.6 ms** p50, worse
+than simply returning six. "The search is cheap so search more" was a plausible story that
+one measurement removed, which is the same lesson `E-D19` records about coverage.
+
+### E-D28 — A percentage would round the whole product to zero
+*Measured 2026-09-01 · 770 scored journeys from the citywide sample*
+
+`Q-C` asks whether our unit vocabulary means anything to a rider, and "1 trip in 1,206" is
+the most-questioned number on the screen. The obvious alternative is a percentage. It is
+strictly worse, and by a wide margin.
+
+| per-trip disruption risk | p10 | p50 | p90 |
+|---|---|---|---|
+| as a rate | 1 in 2,326 | 1 in 459 | 1 in 106 |
+| as a percentage | 0.043% | **0.218%** | 0.940% |
+
+**74.4% of scored journeys would display as "0%"** at whole-percent precision, and 12.6%
+still read "0.0%" at one decimal. The entire discriminating range of the product sits inside
+the first percent, so the unit a rider finds most familiar is the one that destroys the
+signal. This is the same finding `E-D19` recorded against *expected added minutes* — at a
+0.1–0.3% per-trip risk it rounds to zero — arriving for a second candidate unit.
+
+**The complaint behind the question still stands.** "1 in 1,206" is legible in the sense that
+it discriminates and illegible in the sense that nobody knows what to do with it. One reframe
+keeps the discrimination and changes the frame of reference from trips to the rider's own
+calendar: at ten trips a week, the same rates read as
+
+| | p10 | p50 | p90 |
+|---|---|---|---|
+| once every… | 2.5 months | **10.6 months** | 54 months |
+
+That spread is wide enough to act on, needs no new data, and invents nothing — it is the
+measured rate divided by a *stated* trip frequency rather than an assumed one. It does
+import an assumption about how often the rider travels, which is why it is a question for
+`D-08` and not a decision to take here. See `D-41`.
+
+## Added 2026-09-02 (the realtime feed, and what the upgrade cost)
+
+### E-D29 — The realtime feed is a different identifier space, and the join fails silently
+*Measured 2026-09-02 · `bustime.ttc.ca/gtfsrt/{trips,vehicles}` against the loaded static GTFS*
+
+`J-02` ("is it coming?") and `J-03` have been blocked on "GTFS-RT trip updates and vehicle
+positions are not fetched at all" since the gap was first written. That description was
+wrong in a way that mattered: **both feeds are public, live and fetchable.** `trips` returns
+2,301 trip updates (723 KB) and `vehicles` 127 KB of positions.
+
+They cannot be joined to our schedule.
+
+| | feed | static GTFS | overlap |
+|---|---|---|---|
+| trip ids | 2,301 | 138,036 | **1** |
+| stop ids | 8,626 | 9,402 | 5,116 — *coincidental* |
+| route ids | 181 | 235 | **180 (99%)** |
+
+**The stop overlap is the dangerous number.** 59% of the feed's stop ids exist in our stop
+table, so the obvious join returns rows. It returns the *wrong* rows: feed stop `6857` yields
+routes 21, 939 and 996, while GTFS stop 6857 is *Queen St West at Triller Ave*. Those are
+Scarborough routes. A stop-level arrivals board built on that join is confidently wrong at
+more than half of all stops, and nothing about it looks broken.
+
+Trip ids settle it — the feed's are negative hashes (`-1092852660`), the schedule's are
+sequential (`50790576`). One id in 2,301 matches, which is noise. `bustime.ttc.ca` is a
+BusTime deployment with its own internal identifiers; the static feed is Toronto Open Data.
+
+**Route ids do match, 180 of 181.** So the feed answers *"is this route running right now"* —
+which `E-D23` says is the question that matters, since 36.1% of all rider-waiting is a
+vehicle that never came and 74% of it on the 31 Greenwood. It does not answer *"when is the
+next one"*, and no amount of care makes it.
+
+*The one remaining path is spatial* — match vehicle positions to the nearest GTFS stop. That
+is inventing the mapping, which is what `P-03` forbids and what `PR-08` records riders have
+already learned to distrust. Not taken.
+
+*Why it matters:* a standing gap described as "we do not fetch it" is a scheduling problem. A
+gap described as "the two feeds do not share identifiers" is a data problem with a known
+shape, and it tells the next person what to look for — a crosswalk table, which neither
+publisher provides today. `D-47` records what was built on the half that does join.
+
+### E-D30 — The upgrade cost 438 ms of first paint, and the font is 64 ms of it
+*Measured 2026-09-02 · Chromium under CDP throttling, `E-D25`'s profiles, three runs each*
+
+`D-43` self-hosts Manrope and names its own kill condition: first paint on slow 4G must not
+regress past `D-36`'s 2.2 s. It has.
+
+| | E-D25 (2026-08-29) | now | verdict |
+|---|---|---|---|
+| fast 4G (8 Mbps) | 494 ms | 772 ms | — |
+| **slow 4G (1.5 Mbps)** | **2,138 ms** | **2,576 ms** | **kill condition fired** |
+| 3G (0.75 Mbps) | 5,941 ms | 4,728 ms | improved |
+
+**The font is not the cause.** Blocking the woff2 and re-running gives 2,516 ms against
+2,576 ms with it — **64 ms**, for one 24.8 KB variable file covering all five weights. The
+other ~374 ms is everything else the upgrade added: a second and third surface, the verdict
+card, the confidence pair, the hour strip, the states, and 83 KB more CSS. Reverting `D-43`
+would recover 64 ms of a 438 ms regression and cost the type system.
+
+**The obvious remedy was tried and reverted.** MapLibre is 985 KB of a 1.17 MB bundle and is
+not needed to draw the sheet, so the map was moved behind a dynamic import. First paint on
+slow 4G fell to **1,192 ms** — better than the figure `E-D25` set. It also broke the map:
+Vite stopped emitting the renderer's web worker at the path MapLibre requests, and the
+documented symptom followed exactly — *the canvas stays blank and nothing throws on the main
+thread*. `setWorkerUrl` with `?worker&url` cleared the 404s and the map still did not draw;
+rendered features fell from 5 to 4 and walks from 1 to 0. Reverted, because `D-14` calls the
+map the product's retrieval mechanism and a blank one is not worth 1.4 s.
+
+*Why it matters:* the budget is breached and the cheap explanation is wrong. Anyone reading
+"first paint regressed after a font was added" would revert the font, recover 64 ms, and
+still be over. The real fix is splitting the map bundle, which is a known win of ~1.4 s
+blocked on one piece of worker plumbing — a much better-specified task than "make it faster".
+
+### E-D31 — The first and last mile were invisible, and cost six minutes on a plain trip
+*Measured 2026-09-02 · Toronto One Address Repository via CKAN, against the loaded schedule*
+
+The planner took GTFS stop ids, so a trip began wherever the rider had already walked to.
+
+**525,470 address points ingested, 0 skipped.** The source CSV is 183 MB and 34 of its 38
+columns describe the address *record* rather than the place; four are kept. The database grows
+from 62 MB to **92 MB**, which is a real cost against `E-D25`'s runtime-data figure and is
+carried openly.
+
+**487 Lauder Ave → 100 Queen St W**, 08:30 on a weekday:
+
+| | |
+|---|---|
+| ride only | 37 min |
+| **door to door** | **43 min** |
+| walk in | 4 min, to Oakwood Ave at Jesmond Ave |
+| walk out | 2 min, from Bay St at Hagerman St |
+
+Six minutes, on a trip with a subway leg in the middle of a dense city. It will be worse
+where `U-02` lives: `E-L10` puts Scarborough's transit access score at 20.97 against 102.8 in
+affluent areas, and a lower score is partly a longer walk to the stop.
+
+**The nearest stop is not the right stop.** Multi-origin seeding chose **Oakwood Ave at
+334 m** over **Dufferin St at 289 m** — 45 m further, because the service there leaves sooner.
+Snapping to the nearest stop, which is the obvious implementation, would have put the rider on
+a route going the wrong way. Planning cost 11.7 ms.
+
+**A near-miss worth keeping.** The first key reused `streetTokens` from `streets.ts`, which
+strips N/S/E/W *anywhere* in a name because that is correct for matching an intersection. It
+keyed "North Queen St" as `QUEEN`, so **"100 Queen St West" resolved to 100 North Queen St** —
+a different street 12 km away, returned with no sign anything was wrong. Address matching now
+has its own key that keeps every word and treats a *trailing* direction as identity. Caught by
+testing a landmark whose location is known, which is why the test suite now contains it.
+
+*Why it matters:* the honest door-to-door number is the one a rider plans against, and it was
+never on screen. It also sharpens `F-03`: walk-or-wait compared two *stops* when the real
+comparison is between two *doors*.
+
+### E-D32 — Planning to a door exposed three defects, and one of them was the headline
+*Found 2026-09-02 by reading a returned trip · College St at Elizabeth St → 487 Lauder Ave, 17:45*
+
+`D-48` let a rider plan to an address. The first trip anyone looked at was wrong in three
+separate ways, none of which any test caught.
+
+**1. The arrival time excluded the walk it had just added.** The card read *"There by 18:17"*
+on a trip whose final walk ended at **18:21**. The verdict, the benchmark and the option cards
+were all still stop-to-stop while the sheet above them advertised "door to door". The feature
+existed to correct exactly this number and did not reach it.
+
+**2. The last mile was two walks with a two-minute bus ride between them.** Walk 1 min, wait
+2, ride the 90 for 2, walk 3 — then walk 4.5 more from the stop the journey ended at.
+**Twelve and a half minutes to cover what is a twelve-minute walk from Oakwood Station.** The
+bus saved nothing.
+
+**3. The cause was a shortlist, not the routing.** `accessStops` returned the **six nearest**
+stops. For this door, 75 stops sit within the 1.2 km radius and the six nearest are all the
+same two bus routes 289–356 m away. Every station is excluded — **Fairbank ranks 42nd,
+Oakwood 54th** — so the planner could not consider alighting from the train and walking. It
+was forced onto the 90. The comment justifying the limit said "beyond a handful they are the
+same corner twice", which is true of the nearest six and false of the set that matters.
+
+**What changed, and what it did not fix.** Raising the bound to the whole radius drops the
+absurd second walk: the trip now ends at Vaughan Rd with one 8-minute walk. It still takes the
+90 — and correctly, because with an honest walking estimate that hop saves about three minutes
+on a fifteen-minute walk. The nonsense was the shortlist, not the bus.
+
+**Walking distances were understated, which biased the choice.** Every figure was great-circle
+— a floor, since pavements follow blocks — and the error grows with distance, so a long walk
+was flattered more than a short one. A 1.3 detour factor (the standard figure for a gridded
+network) now applies. It makes walking *look* worse, which is the honest direction: it was
+already that bad.
+
+*Why it matters:* three defects, three tests passing, and a build that typechecked. What found
+them was reading one returned trip and asking whether a person would do it. `E-D22` recorded
+that synthetic testers found eleven defects in carefully-argued code; this is the same lesson
+from the other side — the arithmetic was right and the *recommendation* was absurd, and only a
+reader notices that.
+
+### E-D33 — The option list was padded with trips nobody would take
+*Found 2026-09-02 by reading a returned list · 770 Bay St → 487 Lauder Ave, 17:34*
+
+Four options came back at **37, 51, 66 and 79 minutes** door to door. Only the first was a
+trip anyone would make.
+
+**Where the tail came from.** `D-39` generates alternatives by banning a route the best
+journey uses and re-planning. The best trip is Line 1 plus the 90; banning Line 1 on a trip
+from downtown to Oakwood removes the only fast spine, so what comes back is not a second
+choice but *the best trip that exists without the one route that works*. The diversity pick
+then keeps it precisely because it shares fewest routes with the others. Nothing asked whether
+it was worth a rider's attention.
+
+**The 79-minute option contained legs that undo themselves.** It rode the 94 for one minute
+and then walked four minutes back toward where it had boarded; it rode the 512 for one minute
+between a five-minute walk and a four-minute one. Connection Scan optimises arrival and never
+asks whether a leg earns its overhead, so a one-minute ride wrapped in nine minutes of walking
+is, to the algorithm, a slightly earlier arrival.
+
+**And it printed the best reliability of the four.** "1 in 1094" against the best trip's
+"1 in 352" — three times safer, at the top of the reliability column. It is not. Its coverage
+is **0.05**: `composeRisk` builds the figure from the segments it could score and the rest are
+simply *absent from the product*, so a trip we know almost nothing about composes to a
+near-zero risk. A rider skimming four cards for the lowest number lands on the worst trip.
+
+| | before | after |
+|---|---|---|
+| options offered | 4 | **2** |
+| worst option | 79 min, coverage 0.05 | *dropped as dominated* |
+| second option | 51 min, 2 transfers, coverage 0.88 | **47 min, 0 transfers, coverage 1.00** |
+
+The second option improved because collapsing its pointless one-minute hop on the 5 removed
+the unscored segment that was dragging its coverage down. What is left is a real choice: ten
+minutes slower, no transfers, and a figure we can actually stand behind.
+
+**A bug inside the fix, worth keeping.** Collapsing a stretch leaves a walk that is not one of
+the original legs. The first version matched a ride's leading walks against the *input* array,
+so the synthesised walk was invisible and a second pointless ride was judged without the
+thirteen minutes of walking in front of it — and survived. The stretch now takes its leading
+walks off the output. Three tests cover it, including that case by name.
+
+*Why it matters:* `D-14` says that where there is no real alternative the honest output is one
+route and when to leave, not a menu. The list was doing the opposite — manufacturing a menu
+out of the absence of alternatives, and topping the reliability column with the trip it knew
+least about.

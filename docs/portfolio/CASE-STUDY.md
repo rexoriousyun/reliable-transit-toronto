@@ -294,15 +294,24 @@ actually worked:
   re-reading the brief, superseded, and kept in the log with the reasoning error visible.
 - **I proposed a feature before measuring the thing it was for.** The night case in section
   6. The audit that corrected it took twenty minutes and should have come first.
+- **I trusted a measurement because it agreed with me.** Reviewing whether transfers were
+  priced anywhere in the product, a quick script reported that the ranking preferred the
+  more-complex trip on **46 of 46** comparable journeys. It was a bug: the counter for "a
+  simpler option existed" and the counter for "we chose the transfer anyway" were incremented
+  on the same line, so the ratio could only ever be 1.0. The pre-registered audit put it at
+  **73.1%** — under the bar I had set for calling the ranking transfer-blind, which means the
+  charge I was about to write up was false. Unanimity should have been the tell. Kept in
+  `E-D26` rather than quietly corrected, because the near-miss is the point: the discipline
+  of registering a threshold *before* measuring is what caught it, not my own review.
 
 ## Outcome
 
 A working reliability engine over public data with **no API keys**, a mobile-first trip
-planner that ranks routes by what actually happens, five reproducible audits with
+planner that ranks routes by what actually happens, six reproducible audits with
 pre-registered thresholds, 171 tests, and a decision record explaining every choice and what
 would reverse it.
 
-Alongside it: an evidence base of 24 own measurements plus 15 from literature and market
+Alongside it: an evidence base of 28 own measurements plus 15 from literature and market
 review, a ranked problem inventory, nine
 principles, three personas, five journeys, four flows, and a pre-registered research
 protocol — each traceable to what produced it.
@@ -313,5 +322,5 @@ the trap it has to avoid: U-05 is easy to recruit and U-02 is not, so recruiting
 convenience would produce a study that validates the persona this product was not built for.
 
 The most valuable output is not the interface. It is knowing **which half of the original
-hypothesis was true** — and having the trail to prove it, including the six times I was the
+hypothesis was true** — and having the trail to prove it, including the seven times I was the
 one who turned out to be wrong.

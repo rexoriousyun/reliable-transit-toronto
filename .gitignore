@@ -10,3 +10,4 @@ data/*.db-journal
 .DS_Store
 src/scratch/
 *.tsbuildinfo
+.iris/

@@ -1,7 +1,7 @@
 # System Architecture
 
-What actually runs, as of **2026-08-29 — M12 plus the benchmark, route ranking, vanishing
-service and D-34.** Planned components are marked; nothing here is aspirational unless
+What actually runs, as of **2026-09-02 — M12 plus the benchmark, route ranking, vanishing
+service, D-34, and the 2026-09-02 design upgrade (D-39, D-42–D-47).** Planned components are marked; nothing here is aspirational unless
 labelled. Diagrams are parsed by `npm run check:diagrams`, because GitHub renders a broken
 one as nothing at all.
 
@@ -15,7 +15,7 @@ flowchart TB
         CKAN[(Toronto Open Data / CKAN<br/>delay data, monthly)]
         GTFS[(TTC GTFS static<br/>236 routes, 9,402 stops)]
         RT[(GTFS-Realtime alerts<br/>disruptions + elevators)]
-        RTX[(GTFS-Realtime<br/>trip updates, vehicles)]
+        RTX[(GTFS-Realtime<br/>vehicles - route level)]
     end
 
     subgraph ing[Ingest]
@@ -37,6 +37,7 @@ flowchart TB
     subgraph plan[Planner]
         CON[connections<br/>GTFS to typed arrays]
         CSA[csa<br/>connection scan + footpaths]
+        ALT[alternatives<br/>branch-and-ban, keep diverse]
         IT[itinerary<br/>compose risk across legs]
         WT[wait<br/>headway + minutes outside]
         DEP[departure<br/>work back from a deadline]
@@ -62,17 +63,23 @@ flowchart TB
     BM --> API
     SC --> IT
     RT -->|alerts + elevator outages| API
+    RTX -->|which routes are moving - D-47| API
     API --> WEB
-    RTX -.->|not consumed| plan
 
-    style RTX stroke-dasharray: 5 4,color:#888
+    style RTX stroke:#4a7a5f
     style DB fill:#eef3f8,stroke:#5a7fa8
 ```
 
-**Half the realtime story is wired and half is not.** The alerts feed is consumed — route
-disruptions qualify today's answer (`D-29`) and elevator outages block step-free routing
-(`D-30`). **Trip updates and vehicle positions are not fetched at all**, which is exactly
-why J-02's countdown and J-03 are unbuilt. The dashed edge is a promise, not a component.
+**Realtime is consumed at two levels, and a third is impossible.** The alerts feed qualifies
+today's answer (`D-29`) and blocks step-free routing on elevator outages (`D-30`). The
+vehicles feed says **which routes are moving right now** (`D-47`).
+
+**A stop-level countdown is not available, and the reason is not effort.** Both feeds are
+live and fetched, but `bustime.ttc.ca` uses a different identifier space from the static
+GTFS: 1 trip id in 2,301 matches, and the stop ids collide *coincidentally* — the obvious
+join returns Scarborough routes for a stop on Queen St West, silently, at over half of all
+stops (`E-D29`). Route ids match 180 of 181, which is the join that holds. J-02's countdown
+and J-03 are blocked on a crosswalk neither publisher provides.
 
 Alerts carry no `active_period`, so presence in the latest snapshot is the only evidence one
 is live. The app reports the snapshot's age and stops claiming to know past twelve hours —
@@ -126,6 +133,25 @@ would be noise formatted as precision — `D-11`, the decision the measurements 
 
 Severity pools **per mode**, never across: subway 9/17/23 minutes, surface 24/59/73.
 
+## How a trip gets its alternatives
+
+Connection Scan answers one question — earliest arrival — so a second opinion comes from
+changing the question. `alternatives()` bans a route the best journey uses and re-plans, then
+expands each survivor the same way (branch-and-ban, depth two). Six candidates are generated;
+**four are returned, chosen by lowest route overlap** rather than by rank, because four
+variations on one corridor is one option shown four times (`D-39`).
+
+The funnel above explains the ceiling. **At any pool size the median trip has zero
+alternatives that clear the comparison bar**, because 3.1% of segments reach high confidence
+— so a wider search raises a rate that starts near one percent and cannot manufacture a
+comparison from segments that were never scored (`E-D27`). Searching wider than six is
+actively worse: the extra journeys are two-ban contrivances that crowd out the alternatives a
+rider would consider.
+
+Where choice *is* real, the rates are an order of magnitude higher — a materially safer
+option on 12.3% of downtown trips against 1.3% citywide — which is why comparison is scoped
+to `F-03` and not to the citywide list (`D-40`).
+
 ## Audits as gates
 
 Six reproducible checks. Each can fail; together they are how claims stay falsifiable
@@ -138,6 +164,7 @@ Six reproducible checks. Each can fail; together they are how claims stay falsif
 | `audit:coverage` | Can we place surface delay on a map? | beat 66.1% | **pass** — 76.6% |
 | `audit:timeofday` | Does pooling across the day misrepresent risk? | dispersion > 25%, rho > 0.3 | **pass** — 31.2%, rho 0.406 |
 | `audit:headway` | Is "runs every N min" discriminating? | fires on 5–50% of departures | **pass** — 25.0% |
+| `audit:transfers` | Does a transfer cost anything in the ranking? | blind above 90%, exposure above 10% | **pass on ranking** — 73.1%; 13.0% exposed |
 | `npm test` | 171 unit tests | all pass | **pass** |
 
 Thresholds are pre-registered **in the source**, so a verdict cannot be renegotiated after
@@ -152,8 +179,8 @@ block in `docs/`, because GitHub fails one silently.
 
 | | Needed for | Status |
 |---|---|---|
-| GTFS-RT trip updates + vehicle positions | J-02 countdown, J-03 | **not fetched at all** |
-| Walk comparison | J-05, U-05 | nothing technical blocking it — see F-03 |
+| GTFS-RT stop-level arrivals | J-02 countdown, J-03 | **fetched, but unjoinable** — the feed is a different id space (`E-D29`). Route-level is built (`D-47`) |
+| Walk comparison | J-05, U-05 | **built** — `WalkVsWait`, downtown only (`F-03`, `D-40`) |
 | Weather signal | `PR-13` | not started |
 | Shelter data at stops | `PR-13`, D-34's "outside" figure | not ingested; the app says *outside* and claims nothing about cover |
 | Rider validation | `D-08` — everything | **the binding constraint.** See `08-research.md` |

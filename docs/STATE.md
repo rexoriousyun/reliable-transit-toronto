@@ -3,8 +3,9 @@
 **Read this first.** A single anchor for where the project stands, so no finding depends
 on anyone remembering a conversation. Everything below is reproducible from the repo.
 
-**Last updated:** 2026-08-29. **Every milestone is built. The product is ready for rider
-testing, and that is now the only thing it is waiting on** — see `docs/ux/08-research.md`.
+**Last updated:** 2026-09-02. **Every milestone is built, and the design upgrade is in.**
+The product is ready for rider testing, and that is now the only thing it is waiting on —
+see `docs/ux/08-research.md`.
 
 ---
 
@@ -36,6 +37,7 @@ which no existing tool publishes. Reliability-aware TTC routing already exists
 | `docs/architecture/DEPLOY.md` | How this ships: Fly, the image, and why the data is built first |
 | `docs/design/00-concept.md` | Design concept, and the design work still needed |
 | `docs/design/01-system.md` | The four design rules, encoding, tokens, validation |
+| `docs/design/02-components.md` | What each component is for, and which decision put it there |
 | `docs/product/PLAN.md` | v1 scope, milestones, engine contract |
 | `docs/portfolio/CASE-STUDY.md` | Portfolio narrative — the full record |
 | `docs/portfolio/case-study.html` | The same, as a designed page ([published](https://claude.ai/code/artifact/304700bb-f9a5-40e7-a42b-16a92e780dd0)) |
@@ -73,6 +75,11 @@ would reverse it.
 | Identity and mobile metadata | **done** — named, mark, home-screen title, theme colour (D-35) |
 | Responsiveness | **done** — gzip everywhere, 74 KB of dead payload dropped, warm before serving (D-36) |
 | Deployable | **done** — one image serves app, API and tiles; Fly config; `docs/architecture/DEPLOY.md` (D-37) |
+| Alternatives that differ | **done** — branch-and-ban, then keep the most route-diverse four (D-39) |
+| Design upgrade, pass 1 | **done** — dark default, one confidence mark, the verdict card (D-42–D-46) |
+| Design upgrade, pass 2 | **done** — usual trips, states, step rail, hour strip, desktop, walk-or-wait |
+| Live service signal | **done** — which routes are moving now, route level only (D-47, E-D29) |
+| Plan from an address | **done** — 525,470 address points; the walk at each end is part of the answer (D-48) |
 
 ## The numbers that matter
 
@@ -94,9 +101,20 @@ would reverse it.
 | Ice/snow incident average duration | **68.8 min** | E-D02 |
 | Rider-waiting where the vehicle never came | **36.1%** | E-D23 |
 | Median headway behind a weekday departure | **10.0 min** | E-D24 |
+| Planned connections scheduled at zero slack | **10.2%** | E-D26 |
+| Trips with a ≤2 min step onto ≥20 min service | **13.0%** | E-D26 |
+| Trips with a materially safer option — downtown | **12.3%** | E-D27 |
+| The same, citywide | **1.3%** (2.3% after D-39) | E-D27 |
+| Journeys whose risk would display as "0%" | **74.4%** | E-D28 |
 | First paint on slow 4G, gzipped | **2.2 s** (was 7.1 s) | E-D25 |
 | `/plan` on the wire | **13.6 KB** (was 185 KB) | E-D25 |
 | First `/plan` after a deploy | **102 ms** (was 12.3 s) | E-D25 |
+| `/plan` end to end, warm | **84.7 ms** p50 (was 60.5 before D-39) | E-D27 |
+| First paint on slow 4G, after the upgrade | **2,576 ms** — over the 2.2 s bar | E-D30 |
+| Of that regression, the webfont | **64 ms** | E-D30 |
+| Realtime trip ids matching the schedule | **1 of 2,301** | E-D29 |
+| Address points ingested | **525,470** | E-D31 |
+| Door-to-door vs ride-only on a worked trip | **43 min vs 37** | E-D31 |
 | Container start to healthy | **3.1 s** (was 4 s + a rider's 12.3 s) | E-D25 |
 | Runtime data in the image | **113 MB** (was 298 MB) | E-D25 |
 | Night departures on service every 20 min or worse | **74.3%** (vs 14.2% at pm peak) | E-D24 |
@@ -140,11 +158,11 @@ a hypothesis; the gaps are deliberate, so existing citations stay valid.
 | J-02 | at the stop: is it coming? | **partly** — D-34 gives what a no-show costs; the countdown needs realtime |
 | J-03 | mid-trip disruption | no — needs realtime |
 | J-04 | exploratory: is this route always like this? | **yes (M6, D-31)** |
-| J-05 | downtown: transit or walk? | no — and nothing technical is blocking it |
+| J-05 | downtown: transit or walk? | **partly** — walk-or-wait is built and scoped to the core (F-03, D-40); it compares against the planned trip rather than being its own at-a-stop screen |
 
 ## What is open
 
-**Seven questions, all of them for riders.** Each has a pre-registered verdict condition in
+**Eight questions, all of them for riders.** Each has a pre-registered verdict condition in
 `docs/ux/08-research.md`, written before any session so the result cannot be argued into
 whichever answer is convenient.
 
@@ -156,10 +174,21 @@ whichever answer is convenient.
 | Q-F | Does the two-outcome answer read as honest, or as hedging? | D-24, P-01 |
 | Q-B | Is the segment or the corridor the rider's unit? | D-01 |
 | Q-E | Do riders re-open the list after picking, or is the choice settled? | D-20 |
+| Q-H | With duration equal, do riders prefer fewer transfers — or not care? | D-38 |
 | Q-D | Is compass direction the right handle, or headsigns? | polish |
 
 Plus two persona assumptions that have never been tested: that U-02 usually has no real
 alternative, and that their tolerance for lateness is as asymmetric as assumed.
+
+**Two proposals are scoped and waiting on the same sessions**, both measured rather than
+argued (E-D27, E-D28):
+
+- **A labelled comparison — "fastest" beside "most reliable" — belongs downtown only**
+  (`D-40`). Citywide the two labels name the same journey on ~95% of trips; downtown a
+  materially safer option exists on 12.3%. It lands in `F-03`, which is unbuilt.
+- **The risk unit stays "1 in N" for now** (`D-41`). A percentage is ruled out on
+  measurement — 74.4% of journeys would read "0%". The surviving candidate is the rider's own
+  calendar, and `Q-C` now carries it as a second prompt.
 
 One question is **not** for riders and is worth re-running when the archive grows: does
 per-segment severity persist over a longer window (`D-11`)? It failed at rho 0.10 on 19
@@ -167,8 +196,12 @@ months.
 
 **Known gaps, carried deliberately:**
 
-- **GTFS-RT trip updates and vehicle positions are not fetched at all** — only the alerts
-  feed is. J-02's countdown and J-03 both need them.
+- **GTFS-RT is consumed at route level only, and a countdown is not possible from it.**
+  Both feeds are live and fetched, but they are a different identifier space from the
+  schedule: 1 trip id in 2,301 matches, and the stop ids collide *coincidentally* — feed stop
+  6857 returns Scarborough routes for a stop on Queen St West (`E-D29`). Route ids match 180
+  of 181, so the app says which routes are moving and never when a bus arrives (`D-47`).
+  J-02's countdown and J-03 stay blocked, now on a missing crosswalk rather than on a fetch.
 - **Nobody has deployed it.** The image is built and verified locally — one container serves
   the app, the API and the tiles, healthy 3.1 s after start, 113 MB of data, 441 MB peak
   RSS. `fly.toml` targets Toronto and holds one machine warm. What has not happened is
@@ -193,6 +226,7 @@ npm run audit:stability   # M4 — does segment reliability persist?
 npm run audit:coverage    # M5 — surface geocoding rate
 npm run audit:timeofday   # does pooling across the day misrepresent the risk?
 npm run audit:headway     # is "runs every N min" a discriminating thing to say? (D-34)
+npm run audit:transfers   # does a transfer cost anything in the ranking? (PR-05, D-38)
 npm run benchmark         # what a typical trip looks like, for the comparison (D-28)
 npm test                  # 171 tests
 npm run dev               # API on :3000

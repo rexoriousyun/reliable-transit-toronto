@@ -49,13 +49,23 @@ mid-trip by nature.
 We cannot prevent it. We can make the recovery decision fast instead of panicked.
 
 ## PR-05 — Long commutes compound variance across transfers `PARTIAL`
-**Evidence:** E-L08
+**Evidence:** E-L08, E-D26
 
 Toronto has Canada's longest commutes: 44.1 min average by transit, **30% at 1–2 hours,
 10% at 2+ hours.** Long trips mean more transfers; each transfer is a fresh chance to
 miss a connection, and variance compounds rather than averages out. The 2h+ tail is where
 our value concentrates — and it skews to outer suburbs, which is exactly where the worst
 bus routes are (E-D05).
+
+> **Measured 2026-09-01 (E-D26).** Still `PARTIAL`, and now specifically so. `D-34` prices a
+> missed vehicle at the stop; nothing prices a connection when trips are ordered. A transfer
+> is not a term in `composeRisk` at all. But the two larger charges did not hold up: the
+> ranking is not transfer-blind (73.1%, against a pre-registered 90% bar) and reported risk
+> *rises* with transfer count rather than falling. What is left is a missing tiebreak —
+> 59.2% of the time the ranking prefers more transfers it buys under a minute — and connections
+> that are tight against the service behind them: 10.2% scheduled at zero slack, 13.0% of trips
+> carrying a two-minute step onto 20-minute service. `D-38` proposes the narrow fix and refuses
+> the wide one.
 
 ## PR-06 — One broken elevator cancels the whole trip `INFORM`
 **Evidence:** E-L09
@@ -68,13 +78,19 @@ information.
 Our severity model must not treat this as "a delay, but bigger."
 
 ## PR-07 — Riders who have alternatives are leaving `PARTIAL`
-**Evidence:** E-L05
+**Evidence:** E-L05, E-D27
 
 Riders with a car or a rideshare option "are still mostly choosing those other options,
 because they don't know if the bus will show up." The lost trip is not caused by the
 average delay; it is caused by **not knowing**. This is a confidence problem, and
 confidence is addressable with information even when the underlying service does not
 improve.
+
+> **Measured 2026-09-01 (E-D27).** "Alternatives" is not evenly distributed, and now has a
+> rate rather than an assertion. A materially safer second option exists on **12.3% of
+> downtown trips against 1.3% citywide** — nine times more often inside `E-D14`'s core box.
+> Comparison serves this problem where the alternatives are real and cannot manufacture them
+> where they are not, which is why `D-40` scopes it to `F-03` rather than the citywide list.
 
 ## PR-08 — Official metrics do not match lived experience, so riders distrust all numbers `DIRECT`
 **Evidence:** E-L06, E-D04, E-D09
