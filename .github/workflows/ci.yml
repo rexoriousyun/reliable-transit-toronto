@@ -1,0 +1,30 @@
+# Typecheck, test and build on every push and pull request.
+#
+# No data is needed: the tests are pure domain logic, and the ingest needs a
+# 183 MB download that has no place in a check run. Prisma's client is
+# generated from the schema so the server code typechecks.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm ci
+        working-directory: web
+      - run: npm run build
