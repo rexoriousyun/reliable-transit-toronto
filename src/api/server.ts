@@ -4,10 +4,11 @@ import fastifyStatic from "@fastify/static";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { z } from "zod";
-import { scoreSegment, scoreRoute } from "../domain/score.js";
+import { scoreSegment, scoreRoute, segmentByHour } from "../domain/score.js";
 import { prisma } from "../db/client.js";
 import { rankRoutes } from "../domain/route-ranking.js";
 import { neverCame } from "../domain/vanishing.js";
+import { liveRoutes } from "../domain/realtime.js";
 import { recencyWeight, effectiveMonths } from "../domain/score.js";
 import { registerTiles } from "./tiles.js";
 import { registerPlanner, warmGraph } from "./planner.js";
@@ -324,6 +325,49 @@ app.get("/segments", async () => {
     orderBy: [{ routeId: "asc" }, { direction: "asc" }, { sequence: "asc" }],
   });
   return { count: segments.length, segments };
+});
+
+/**
+ * The whole day on one stretch, for the hour strip.
+ *
+ * Separate from `/reliability` rather than folded into it: the sheet asks for
+ * this only when a rider opens a segment, and every plan response would
+ * otherwise carry 24 buckets nobody reads — the shape of waste `E-D25` found
+ * in `path`.
+ */
+/**
+ * Which routes are moving right now.
+ *
+ * Route-level, not stop-level, and that is a finding rather than a shortcut —
+ * see `realtime.ts`. The feed's stop and trip ids are a different identifier
+ * space from the static GTFS, so a stop board built on the obvious join is
+ * confidently wrong at more than half of all stops. Route ids match 180 of 181.
+ *
+ * A route **absent** from the response is unknown, never zero: the feed carries
+ * surface routes only and a route with nothing running does not appear at all.
+ */
+app.get("/routes/live", async (_req, reply) => {
+  try {
+    const live = await liveRoutes();
+    return {
+      vehicles: Object.fromEntries(live.vehicles),
+      ageSeconds: live.ageSeconds,
+      stale: live.stale,
+    };
+  } catch {
+    // A third-party feed goes down. Saying so is the answer; an empty map
+    // would read as "nothing is running anywhere" (P-03).
+    return reply.code(503).send({ error: "realtime feed unavailable" });
+  }
+});
+
+app.get("/segments/:id/hours", async (req, reply) => {
+  const parsed = query.safeParse(req.query);
+  if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+  const { id } = req.params as { id: string };
+  const hours = await segmentByHour(decodeURIComponent(id), parsed.data.dayOfWeek);
+  if (hours === null) return reply.code(404).send({ error: "unknown segment" });
+  return { hours };
 });
 
 app.get("/segments/:id/reliability", async (req, reply) => {

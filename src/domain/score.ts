@@ -322,3 +322,71 @@ export async function scoreRoute(
   const scored = await Promise.all(segments.map((s) => scoreSegment(s.id, query)));
   return scored.filter((s): s is SegmentReliability => s !== null);
 }
+
+/** One hour of the day on one segment. */
+export interface HourBucket {
+  hour: number;
+  /** Null when the hour has too few observations to describe (`P-03`). */
+  gapMinutesPerMonth: number | null;
+  /** Weighted observations behind it, so the strip can hatch a thin bar. */
+  sample: number;
+}
+
+/**
+ * The whole day on one segment, hour by hour.
+ *
+ * Explore used two native `<select>`s — a day and an hour — so seeing how a
+ * stretch behaves across the day meant twenty-four separate reads, each
+ * replacing the last. The shape was never visible, which is the one thing an
+ * hourly breakdown is for.
+ *
+ * **Every hour is returned, including the empty ones.** An hour with no
+ * observations is not an hour with no risk; dropping it would let the strip
+ * close up and imply service we cannot speak for is service that behaves. The
+ * bar is drawn hatched instead, and `gapMinutesPerMonth` stays null (`P-03`).
+ *
+ * Recency-weighted on the same 3-month half-life as `scoreSegment` (`E-D18`),
+ * and gated on the same confidence floor, so a bar and the headline figure
+ * above it cannot disagree about what counts as known.
+ */
+export async function segmentByHour(
+  segmentId: string,
+  dayOfWeek?: string,
+): Promise<HourBucket[] | null> {
+  const segment = await prisma.segment.findUnique({ where: { id: segmentId } });
+  if (segment === null) return null;
+
+  const incidents = await prisma.delayIncident.findMany({
+    where: {
+      segmentId,
+      minDelay: { gt: 0 },
+      ...(dayOfWeek === undefined ? {} : { dayOfWeek }),
+    },
+    select: { minGap: true, hour: true, occurredAt: true },
+  });
+
+  const now = await latestObservation();
+  const denominator = effectiveMonths(await observationMonths());
+
+  const gap = new Float64Array(24);
+  const weight = new Float64Array(24);
+  for (const i of incidents) {
+    const h = i.hour;
+    if (h === null || h < 0 || h > 23) continue;
+    const w = recencyWeight(i.occurredAt, now);
+    gap[h] = gap[h]! + i.minGap * w;
+    weight[h] = weight[h]! + w;
+  }
+
+  return Array.from({ length: 24 }, (_, hour) => {
+    const sample = weight[hour]!;
+    return {
+      hour,
+      gapMinutesPerMonth:
+        confidenceFor(sample) === "unknown"
+          ? null
+          : Number((gap[hour]! / denominator).toFixed(1)),
+      sample: Number(sample.toFixed(2)),
+    };
+  });
+}

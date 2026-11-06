@@ -23,7 +23,7 @@ const STYLE_PATH = "/styles/liberty";
  * meaning — so the whole basemap is desaturated on the way through and the only
  * colour left on screen is data.
  */
-function greyToken(token: string): string {
+function greyToken(token: string, dark: boolean): string {
   const hex = /^#([0-9a-f]{3,8})$/i.exec(token);
   const rgba = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)$/i.exec(token);
 
@@ -50,10 +50,19 @@ function greyToken(token: string): string {
     a = hsl[4] === undefined ? 1 : Number(hsl[4]);
   }
 
-  // Rec. 709 luma, then blended 45% toward the light surface so the basemap sits
+  // Rec. 709 luma, then blended 45% toward the page surface so the basemap sits
   // back and route lines read as the figure against it.
+  //
+  // Dark inverts the luma before blending rather than blending a light basemap
+  // toward black. Blending alone leaves a white road at mid-grey, which is
+  // brighter than the route drawn on top of it — the figure and the ground swap
+  // over, which is the one thing this function exists to prevent. Inverting
+  // first sends paper to near-black and ink to legible grey, so the same rule
+  // holds in both themes (`D-42`).
   const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  const v = Math.round(luma + (242 - luma) * 0.45);
+  const base = dark ? 255 - luma : luma;
+  const target = dark ? 16 : 242;
+  const v = Math.round(base + (target - base) * 0.45);
   return `rgba(${v}, ${v}, ${v}, ${a})`;
 }
 
@@ -77,12 +86,12 @@ const DROPPED_LAYERS = new Set(["poi_r20", "poi_r7", "poi_r1"]);
  * expressions — ["interpolate", ..., "#abc", ...] — so the whole subtree is
  * walked and `greyToken` returns non-colour strings unchanged.
  */
-function greyDeep(node: unknown): unknown {
-  if (typeof node === "string") return greyToken(node);
-  if (Array.isArray(node)) return node.map(greyDeep);
+function greyDeep(node: unknown, dark: boolean): unknown {
+  if (typeof node === "string") return greyToken(node, dark);
+  if (Array.isArray(node)) return node.map((n) => greyDeep(n, dark));
   if (node !== null && typeof node === "object") {
     return Object.fromEntries(
-      Object.entries(node as Record<string, unknown>).map(([k, v]) => [k, greyDeep(v)]),
+      Object.entries(node as Record<string, unknown>).map(([k, v]) => [k, greyDeep(v, dark)]),
     );
   }
   return node;
@@ -94,13 +103,13 @@ function greyDeep(node: unknown): unknown {
  * Only `paint` is descended into: `layout` and top-level strings are layer names,
  * source refs, filters and font stacks, which must survive untouched.
  */
-function desaturate(node: unknown): unknown {
-  if (Array.isArray(node)) return node.map(desaturate);
+function desaturate(node: unknown, dark: boolean): unknown {
+  if (Array.isArray(node)) return node.map((n) => desaturate(n, dark));
   if (node !== null && typeof node === "object") {
     return Object.fromEntries(
       Object.entries(node as Record<string, unknown>).map(([k, v]) => [
         k,
-        k === "paint" ? greyDeep(v) : desaturate(v),
+        k === "paint" ? greyDeep(v, dark) : desaturate(v, dark),
       ]),
     );
   }
@@ -129,16 +138,21 @@ function originOf(req: { protocol: string; headers: Record<string, unknown> }): 
 
 export function registerTiles(app: FastifyInstance, mountedAt = "/tiles"): void {
   app.get(`${mountedAt}/style`, async (req, reply) => {
+    // Dark is the app's default (`D-42`), so it is this route's default too: a
+    // missing param must not hand back the theme the app no longer opens in.
+    const dark = (req.query as { theme?: string }).theme !== "light";
     const res = await fetch(`${UPSTREAM}${STYLE_PATH}`);
     if (!res.ok) return reply.code(502).send({ error: `upstream ${res.status}` });
     const base = `${originOf(req)}${mountedAt}`;
     const style = JSON.parse(rewrite(await res.text(), base)) as Record<string, unknown>;
     style["layers"] = (style["layers"] as Array<{ id?: string }>)
       .filter((l) => !DROPPED_LAYERS.has(l.id ?? ""))
-      .map(desaturate);
+      .map((l) => desaturate(l, dark));
 
     return reply
       .type("application/json")
+      // The theme is in the query string, so the two variants are already
+      // distinct cache entries and no `vary` is needed.
       .header("cache-control", "public, max-age=3600")
       .send(JSON.stringify(style));
   });
