@@ -17,11 +17,11 @@ datasource db {
 /// Stored verbatim — filtering (zero-minute records, terminals) happens in the
 /// domain layer, never at ingest, so the raw record stays auditable (P-08).
 model DelayIncident {
-  id          Int      @id @default(autoincrement())
-  mode        String   // "subway" | "bus" | "streetcar"
-  occurredAt  DateTime // date + time combined, local Toronto time
-  dayOfWeek   String
-  hour        Int      // 0-23, denormalised for time-of-day queries
+  id         Int      @id @default(autoincrement())
+  mode       String // "subway" | "bus" | "streetcar"
+  occurredAt DateTime // date + time combined, local Toronto time
+  dayOfWeek  String
+  hour       Int // 0-23, denormalised for time-of-day queries
 
   /// Raw location string as published. Subway: "BATHURST STATION".
   /// Surface: free-text intersection, e.g. "KING AND PARLIAMENT" (E-D07).
@@ -29,16 +29,16 @@ model DelayIncident {
   /// Route or line as published: "YU", "BD", "SHP", "52 LAWRENCE WEST".
   lineRaw     String
 
-  code        String
+  code     String
   /// Vehicle lateness in minutes. Diagnostic only — NOT the headline metric (D-02).
-  minDelay    Int
+  minDelay Int
   /// Headway gap left behind, in minutes. The rider-facing metric (D-02, E-D09).
-  minGap      Int
-  bound       String?
-  vehicle     String?
+  minGap   Int
+  bound    String?
+  vehicle  String?
 
-  sourceFile  String   // provenance for P-08
-  ingestedAt  DateTime @default(now())
+  sourceFile String // provenance for P-08
+  ingestedAt DateTime @default(now())
 
   /// Set by the attribution pass (M3). Null means unattributed — either a
   /// non-revenue location, or a name we refused to guess at (P-03, P-08).
@@ -87,12 +87,12 @@ model Route {
 
 /// Records each ingest run so published numbers trace to a data window (P-08).
 model IngestRun {
-  id          Int      @id @default(autoincrement())
-  startedAt   DateTime @default(now())
+  id          Int       @id @default(autoincrement())
+  startedAt   DateTime  @default(now())
   finishedAt  DateTime?
   source      String
-  rowsRead    Int      @default(0)
-  rowsWritten Int      @default(0)
+  rowsRead    Int       @default(0)
+  rowsWritten Int       @default(0)
   windowStart DateTime?
   windowEnd   DateTime?
   notes       String?
@@ -110,7 +110,7 @@ model Segment {
   direction   String // N | S | E | W
   fromStation String
   toStation   String
-  sequence    Int    // position along the line, for ordering
+  sequence    Int // position along the line, for ordering
 
   /// Surface segments key on GTFS stops; subway segments key on station names,
   /// because delay data identifies subway locations by station, not by platform.
@@ -168,8 +168,30 @@ model ServiceAlert {
 /// Baseline and live outage are kept apart on purpose: a station can be built
 /// accessible and be unusable today. Collapsing them would hide which is which.
 model StationAccess {
-  station     String  @id
+  station  String  @id
   /// GTFS wheelchair_boarding: 1 accessible, 2 not, 0 unknown.
-  boarding    Int
-  stopId      String?
+  boarding Int
+  stopId   String?
+}
+
+/// Municipal address points, so a trip can start at a door rather than a stop.
+///
+/// Toronto Open Data's One Address Repository. Only the four fields a lookup
+/// needs are kept — number, street, and a coordinate — because the source CSV
+/// is 183 MB and 34 of its 38 columns describe the address record rather than
+/// the place.
+model AddressPoint {
+  id Int @id @default(autoincrement())
+
+  /// Normalised street identity, direction included: "LAUDER", "LAWRENCE|E".
+  /// The direction matters here in a way it does not for intersections —
+  /// 487 Lawrence Ave E and 487 Lawrence Ave W are kilometres apart.
+  streetKey String
+  number    Int
+  lat       Float
+  lon       Float
+  /// As the city writes it, so the interface can echo the address back.
+  label     String
+
+  @@index([streetKey, number])
 }

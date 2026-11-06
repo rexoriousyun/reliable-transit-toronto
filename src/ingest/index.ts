@@ -5,12 +5,20 @@ import { attributeSubwayIncidents, attributeSurfaceIncidents } from "../domain/a
 import { buildSurfaceSegments } from "./surface-segments.js";
 import { buildGeometry } from "./geometry.js";
 import { ingestAlerts } from "./alerts.js";
+import { ingestAddresses } from "./addresses.js";
 import { disconnect } from "../db/client.js";
 
 const MODES: Mode[] = ["subway", "bus", "streetcar"];
 
 async function main(): Promise<void> {
-  console.log("GTFS static...");
+  console.log("Address points...");
+  const addr = await ingestAddresses();
+  console.log(
+    `  ${addr.written.toLocaleString()}/${addr.read.toLocaleString()} addresses` +
+    ` (${addr.skipped.toLocaleString()} without a number, street or point)`,
+  );
+
+  console.log("\nGTFS static...");
   const gtfs = await ingestGtfs();
   console.log(`  ${gtfs.stops.toLocaleString()} stops, ${gtfs.routes} routes`);
 

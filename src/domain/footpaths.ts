@@ -8,7 +8,15 @@
  */
 
 const MAX_WALK_M = 400;
-const WALK_SPEED_MS = 1.25;
+
+/**
+ * Walking pace, in metres per second.
+ *
+ * Exported because `walk.ts` compares a whole journey against walking it, and
+ * two files disagreeing about how fast a person walks would let the transfer
+ * and the comparison contradict each other on the same screen.
+ */
+export const WALK_SPEED_MS = 1.25;
 /** Charged on every transfer: finding the platform, crossing the road. */
 export const MIN_TRANSFER_S = 60;
 

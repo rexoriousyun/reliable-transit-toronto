@@ -18,13 +18,15 @@ import { clusterAlerts, isServiceAffecting, alertAgeHours, ALERTS_STALE_AFTER_HO
   type Disruption } from "../domain/disruption.js";
 import { stationAccessMap, isUsable, type StationAccess } from "../domain/accessibility.js";
 import { stationFromPlatform } from "../domain/stations.js";
-import { BENCHMARK_PATH, MIN_COMPARABLE_COVERAGE, bucketFor, percentileOf, verdictFor,
+import { BENCHMARK_PATH, MATERIAL_RATIO, MIN_COMPARABLE_COVERAGE, bucketFor, percentileOf, verdictFor,
   type BenchmarkTable, type Verdict } from "../benchmark/table.js";
 import { buildFootpaths, type Footpaths } from "../domain/footpaths.js";
-import { plan, type Journey } from "../domain/csa.js";
+import { plan, planFromPoints, type Journey } from "../domain/csa.js";
 import { buildFrequency, type SegmentFrequency } from "../domain/frequency.js";
 import { notableWait } from "../domain/wait.js";
 import { buildSegmentIndex, scoreJourney } from "../domain/itinerary.js";
+import { walkOption, accessStops, collapsePointlessRides, type AccessStop } from "../domain/walk.js";
+import { geocode } from "../domain/geocode.js";
 
 /** GTFS service id for the weekday schedule. */
 const WEEKDAY_SERVICE = "1";
@@ -270,6 +272,19 @@ async function stepFreeBlocks(
 const planQuery = z.object({
   from: z.string().min(1),
   to: z.string().min(1),
+  /**
+   * A door rather than a stop.
+   *
+   * When present, `from`/`to` are still sent — the stop the walk resolves to —
+   * but these say where the rider actually is, so the walk at each end is part
+   * of the answer instead of being invisible. Optional because a rider who
+   * picked a station meant that station, and snapping it to "somewhere within
+   * 1.2 km" would be answering a question they did not ask.
+   */
+  fromLat: z.coerce.number().min(-90).max(90).optional(),
+  fromLon: z.coerce.number().min(-180).max(180).optional(),
+  toLat: z.coerce.number().min(-90).max(90).optional(),
+  toLon: z.coerce.number().min(-180).max(180).optional(),
   /** Seconds since midnight. Defaults to a weekday morning peak. */
   departAt: z.coerce.number().int().min(0).max(36 * 3600).optional(),
   /**
@@ -288,6 +303,161 @@ const planQuery = z.object({
  * probe.
  */
 const ARRIVE_BY_WINDOW_S = 3 * 3600;
+
+/**
+ * The routes a journey rides, in order. Two journeys sharing one are the same
+ * answer to a rider however the schedule differs underneath.
+ */
+function journeySignature(j: Journey): string {
+  return j.legs.map((l) => `${l.kind}:${l.routeId ?? ""}`).join(">");
+}
+
+/**
+ * How wide to search, how many searches that may cost, and how many journeys
+ * come back.
+ *
+ * The pool is larger than the answer on purpose, and both numbers were measured
+ * rather than chosen. Returning six journeys instead of four doubled the
+ * response — 69 KB to 132 KB at the median — and added half again to the
+ * endpoint's latency, which is the bill `D-36` had just finished paying down.
+ * So the width buys candidates and the cap spends them.
+ *
+ * A sweep over 300 citywide trips, measuring how often the returned set holds a
+ * materially safer alternative (`MATERIAL_RATIO`, and one costing five minutes
+ * or less):
+ *
+ * | pool / kept | journeys | search ms | material | and cheap |
+ * |---|---|---|---|---|
+ * | 4 / 4 *(before)* | 3.42 | 18.6 | 1.3% | 0.3% |
+ * | **6 / 4** | **3.76** | **31.8** | **2.3%** | **1.0%** |
+ * | 8 / 4 | 3.76 | 43.3 | 2.0% | 0.7% |
+ * | 12 / 4 | 3.76 | 54.8 | 2.0% | 0.7% |
+ *
+ * **Searching wider makes it worse past six**, which was not the expectation
+ * going in. A deeper pool is mostly journeys reached by banning two routes at
+ * once, and those crowd out the single-ban alternatives that a rider would
+ * actually consider — the diversity pick has more to choose from and chooses
+ * less well. Twelve costs 23 ms more per request to find a materially safer
+ * option less often than six does.
+ */
+const CANDIDATE_POOL = 6;
+const MAX_SEARCHES = 8;
+const MAX_RETURNED = 4;
+
+/**
+ * Genuinely different ways to make the same trip.
+ *
+ * Connection Scan answers one question — earliest arrival — so a second opinion
+ * has to come from changing the question. Banning a route the best journey uses
+ * and re-planning is the cheapest way to do that, and it degrades honestly:
+ * where the network offers no alternative the search returns nothing, which is
+ * itself the answer (`D-13`'s surviving insight, kept by `D-14`: adapt to how
+ * much choice actually exists rather than padding a menu).
+ *
+ * **Banning one route at a time was not enough.** The previous version banned
+ * each of the first three routes the best journey used, all from the same
+ * starting point, so every alternative was one edit away from the original and
+ * a trip whose second-best answer needed two changes was never found. This
+ * expands each surviving journey in turn — ban a route, then ban a route of
+ * what that produced — which is the standard branch-and-ban shape and finds the
+ * second edit.
+ *
+ * **Then it throws most of them away.** The pool is ranked by how little it
+ * overlaps what is already kept, and only `MAX_RETURNED` survive. Diversity
+ * rather than rank, because a rider scanning a list is choosing between *ways
+ * to go*, and four variations on one corridor is one option printed four times.
+ * The earliest arrival is always kept first; the rest earn their place by being
+ * different from it.
+ *
+ * **The remaining limit is coverage, not search.** On a median trip *zero*
+ * candidates clear the comparison bar, however many are generated, because most
+ * surface segments cannot be scored at all (`E-D12`). More search does not fix
+ * that, and this function is deliberately not the place that tries to.
+ */
+function alternatives(
+  connections: ConnectionSet,
+  footpaths: Footpaths,
+  from: string,
+  to: string,
+  departAt: number,
+  blockedStops: ReadonlySet<string>,
+  best: Journey,
+): Journey[] {
+  const pool: Journey[] = [best];
+  const seen = new Set([journeySignature(best)]);
+  let searches = 0;
+  let frontier: Array<{ journey: Journey; banned: ReadonlySet<string> }> = [
+    { journey: best, banned: new Set() },
+  ];
+
+  // Two rounds. A third would keep finding journeys, but they are reached by
+  // banning three of the rider's routes at once and read as contrivances.
+  outer: for (let depth = 0; depth < 2; depth++) {
+    const next: Array<{ journey: Journey; banned: ReadonlySet<string> }> = [];
+    for (const node of frontier) {
+      for (const routeId of routesOf(node.journey)) {
+        if (pool.length >= CANDIDATE_POOL || searches >= MAX_SEARCHES) break outer;
+        if (node.banned.has(routeId)) continue;
+        const banned = new Set(node.banned).add(routeId);
+        searches++;
+        const alt = plan(connections, footpaths, from, to, departAt,
+                         ARRIVE_BY_WINDOW_S, banned, blockedStops);
+        if (alt === null) continue;
+        const sig = journeySignature(alt);
+        if (seen.has(sig)) continue;
+        seen.add(sig);
+        pool.push(alt);
+        next.push({ journey: alt, banned });
+      }
+    }
+    if (next.length === 0) break;
+    frontier = next;
+  }
+  return mostDiverse(pool, MAX_RETURNED);
+}
+
+/** The routes a journey rides, as a set. */
+function routesOf(j: Journey): Set<string> {
+  return new Set(j.legs.filter((l) => l.kind === "ride").map((l) => l.routeId!));
+}
+
+/**
+ * Pick `k` journeys that are as unlike each other as possible.
+ *
+ * Greedy max-min on route overlap: keep the first — always the earliest
+ * arrival, which is the answer to the question actually asked — then repeatedly
+ * add whichever candidate shares fewest routes with everything kept so far.
+ * Overlap is Jaccard on the route sets, which is the rider's own notion of "the
+ * same way there": two journeys riding the 504 and the 1 differ only in details
+ * they did not ask about.
+ */
+function mostDiverse(all: readonly Journey[], k: number): Journey[] {
+  if (all.length <= k) return [...all];
+  const routes = new Map(all.map((j) => [j, routesOf(j)]));
+  const overlap = (a: Set<string>, b: Set<string>): number => {
+    let shared = 0;
+    for (const r of a) if (b.has(r)) shared++;
+    const union = a.size + b.size - shared;
+    return union === 0 ? 1 : shared / union;
+  };
+  const keep = [all[0]!];
+  const rest = all.slice(1);
+  while (keep.length < k && rest.length > 0) {
+    let bestIndex = 0;
+    let bestScore = Infinity;
+    for (let i = 0; i < rest.length; i++) {
+      const mine = routes.get(rest[i]!)!;
+      let worst = 0;
+      for (const kept of keep) worst = Math.max(worst, overlap(mine, routes.get(kept)!));
+      if (worst < bestScore) {
+        bestScore = worst;
+        bestIndex = i;
+      }
+    }
+    keep.push(rest.splice(bestIndex, 1)[0]!);
+  }
+  return keep;
+}
 
 /** Station codes come out of the incident feed upper-cased; riders read signs. */
 function named<T extends { worst: Array<{ from: string; to: string }>; dominant: { from: string; to: string } | null }>(r: T): T {
@@ -354,8 +524,51 @@ export function registerPlanner(app: FastifyInstance): void {
     const q = z.object({ q: z.string().min(2), limit: z.coerce.number().int().max(25).optional() })
       .safeParse(req.query);
     if (!q.success) return reply.code(400).send({ error: q.error.flatten() });
+    return { stops: await findStops(q.data.q, q.data.limit ?? 8) };
+  });
 
-    const limit = q.data.limit ?? 8;
+  /**
+   * Everywhere a trip can start or end: stops and street addresses in one list.
+   *
+   * One endpoint rather than two because a rider typing "487 Lauder" does not
+   * know whether they are searching stops or addresses, and asking them to pick
+   * a tab is asking about our data model rather than about their trip.
+   */
+  app.get("/places/search", async (req, reply) => {
+    const q = z.object({ q: z.string().min(2), limit: z.coerce.number().int().max(25).optional() })
+      .safeParse(req.query);
+    if (!q.success) return reply.code(400).send({ error: q.error.flatten() });
+    const text = q.data.q.trim();
+
+    // A leading house number is the signal to geocode. Without one this is a
+    // stop search: a rider typing "King" wants King Station, not 1 King St.
+    const addresses = /^\d/.test(text) ? await geocode(text, 4) : [];
+    const stops = await findStops(text, q.data.limit ?? 6);
+
+    return {
+      places: [
+        ...addresses.map((a) => ({
+          kind: "address" as const,
+          // The coordinate *is* the identity: an address is not in the stop
+          // table and never gets an id of its own.
+          id: `@${a.lat.toFixed(6)},${a.lon.toFixed(6)}`,
+          name: a.label,
+          lat: a.lat, lon: a.lon,
+          approximate: a.approximate,
+        })),
+        ...stops.map((s) => ({
+          kind: "stop" as const,
+          id: s.id, name: s.name, lat: s.lat, lon: s.lon, approximate: false,
+        })),
+      ],
+    };
+  });
+
+  async function findStops(
+    query: string,
+    limit: number,
+  ): Promise<Array<{ id: string; name: string; lat: number; lon: number }>> {
+    const q = { data: { q: query } };
     const { boardable } = await getGraph();
     // Over-fetch, then clean up: the raw GTFS list has a row per platform and
     // per side of the street, so a naive top-8 is mostly duplicates.
@@ -401,15 +614,15 @@ export function registerPlanner(app: FastifyInstance): void {
       })
       .slice(0, limit);
 
-    return { stops };
-  });
+    return stops;
+  }
 
   app.get("/plan", async (req, reply) => {
     const parsed = planQuery.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
 
-    const { connections, footpaths, stopNames, stopCoords, frequency, segmentIndex, serviceWindow } =
-      await getGraph();
+    const { connections, footpaths, stopNames, stopCoords, frequency, segmentIndex,
+            serviceWindow, boardable } = await getGraph();
     const departAt = parsed.data.departAt ?? 8 * 3600 + 30 * 60;
     // Scoring keys on the raw GTFS name: the segment index was built from it,
     // and a prettier string here would silently miss every lookup.
@@ -423,12 +636,61 @@ export function registerPlanner(app: FastifyInstance): void {
     // An early-morning hour is two positions in the schedule — 04:00 today and
     // 28:00 on the service day still running — and only one of them carries any
     // service. Both are tried, and the better result wins.
+    const departCandidates = serviceDayTimes(departAt, serviceWindow);
+
+    /**
+     * A door resolves to the stop the *timetable* prefers, not the nearest one.
+     *
+     * `planFromPoints` seeds every stop within walking distance at the time the
+     * rider could be there, so a stop 50 m further away wins when the service
+     * there leaves sooner — which is most of the value. Resolved once here, and
+     * the rest of the endpoint then runs on stop ids exactly as before: the
+     * alternatives, the arrive-by bisection and the scoring all keep working
+     * without learning about addresses.
+     */
+    const doorFrom = parsed.data.fromLat !== undefined && parsed.data.fromLon !== undefined
+      ? { lat: parsed.data.fromLat, lon: parsed.data.fromLon } : null;
+    const doorTo = parsed.data.toLat !== undefined && parsed.data.toLon !== undefined
+      ? { lat: parsed.data.toLat, lon: parsed.data.toLon } : null;
+
+    let fromStop = parsed.data.from;
+    let toStop = parsed.data.to;
+    let access: AccessStop | null = null;
+    let egress: AccessStop | null = null;
+
+    if (doorFrom !== null || doorTo !== null) {
+      const coords = [...boardable].flatMap((id) => {
+        const c = stopCoords.get(id);
+        return c === undefined ? [] : [{ id, lat: c.lat, lon: c.lon }];
+      });
+      const origins = doorFrom === null
+        ? [{ stopId: fromStop, seconds: 0, metres: 0 }]
+        : accessStops(doorFrom, coords);
+      const targets = doorTo === null
+        ? [{ stopId: toStop, seconds: 0, metres: 0 }]
+        : accessStops(doorTo, coords);
+      const probe = origins.length === 0 || targets.length === 0
+        ? null
+        : planFromPoints(connections, footpaths, origins, targets, departCandidates[0]!);
+      if (probe === null) {
+        // No stop within walking distance, or none of them reach the far end.
+        // A real answer, not an error: this address is not on the network.
+        return { journey: null, reason: origins.length === 0 || targets.length === 0
+          ? "No stop within a walk of that address."
+          : "No journey from there within three hours." };
+      }
+      fromStop = probe.access.stopId;
+      toStop = probe.egress.stopId;
+      if (doorFrom !== null) access = origins.find((o) => o.stopId === fromStop) ?? null;
+      if (doorTo !== null) egress = targets.find((t) => t.stopId === toStop) ?? null;
+    }
+
     const stepFree = parsed.data.stepFree ?? false;
     const { stops: blockedStops, stations: blockedStations, endsBlocked } = stepFree
-      ? await stepFreeBlocks(stopNames, [parsed.data.from, parsed.data.to])
+      ? await stepFreeBlocks(stopNames, [fromStop, toStop])
       : { stops: new Set<string>(), stations: [] as StationAccess[], endsBlocked: [] as StationAccess[] };
 
-    const departCandidates = serviceDayTimes(departAt, serviceWindow);
+
     let searchFrom = departCandidates[0]!;
     let arriveByUsed: number | null = null;
 
@@ -436,7 +698,7 @@ export function registerPlanner(app: FastifyInstance): void {
       let best: { departAt: number; arriveAt: number; arriveBy: number } | null = null;
       for (const arriveBy of serviceDayTimes(parsed.data.arriveBy, serviceWindow)) {
         const found = latestDeparture(arriveBy, ARRIVE_BY_WINDOW_S, (t) => {
-          const j = plan(connections, footpaths, parsed.data.from, parsed.data.to, t,
+          const j = plan(connections, footpaths, fromStop, toStop, t,
                          ARRIVE_BY_WINDOW_S, new Set(), blockedStops);
           return j === null ? null : j.arriveAt;
         });
@@ -456,7 +718,7 @@ export function registerPlanner(app: FastifyInstance): void {
     } else {
       // Without a deadline, take the first reading that can actually be planned.
       for (const t of departCandidates) {
-        if (plan(connections, footpaths, parsed.data.from, parsed.data.to, t,
+        if (plan(connections, footpaths, fromStop, toStop, t,
                  ARRIVE_BY_WINDOW_S, new Set(), blockedStops) !== null) {
           searchFrom = t;
           break;
@@ -464,7 +726,7 @@ export function registerPlanner(app: FastifyInstance): void {
       }
     }
 
-    const best = plan(connections, footpaths, parsed.data.from, parsed.data.to, searchFrom,
+    const best = plan(connections, footpaths, fromStop, toStop, searchFrom,
                       ARRIVE_BY_WINDOW_S, new Set(), blockedStops);
     if (best === null) {
       // A failed plan is a real answer, not an error: no service in the window
@@ -473,21 +735,31 @@ export function registerPlanner(app: FastifyInstance): void {
         ?? "No journey found within 3 hours of the requested departure." };
     }
 
-    // Alternatives by banning one route at a time from the best journey. It is
-    // the cheapest way to get genuinely different options rather than the same
-    // trip a few minutes later — and where the network offers no alternative,
-    // it correctly returns nothing, which is itself the honest answer (D-13's
-    // surviving insight: adapt to how much choice actually exists).
-    const candidates: Journey[] = [best];
-    const usedRoutes = [...new Set(best.legs.filter((l) => l.kind === "ride").map((l) => l.routeId!))];
-    for (const banned of usedRoutes.slice(0, 3)) {
-      const alt = plan(connections, footpaths, parsed.data.from, parsed.data.to, searchFrom,
-        3 * 3600, new Set([banned]), blockedStops);
-      if (alt === null) continue;
-      const signature = (j: Journey): string => j.legs.map((l) => `${l.kind}:${l.routeId ?? ""}`).join(">");
-      if (candidates.some((c) => signature(c) === signature(alt))) continue;
-      candidates.push(alt);
-    }
+    const candidates = alternatives(connections, footpaths, fromStop, toStop,
+                                    searchFrom, blockedStops, best);
+
+    /**
+     * Remove rides that cost more walking than they save.
+     *
+     * Applied to the answer rather than inside the search: the arrive-by
+     * bisection and the alternatives generator both depend on `plan` returning
+     * the earliest arrival, and quietly changing that underneath them would
+     * change what they are searching over.
+     */
+    const tidy = (j: Journey): Journey => {
+      const legs = collapsePointlessRides(
+        j.legs,
+        (id) => stopCoords.get(id),
+        (fromStop, toStop, departAt, arriveAt) => ({ kind: "walk", fromStop, toStop, departAt, arriveAt }),
+      );
+      if (legs.length === j.legs.length) return j;
+      return {
+        legs,
+        departAt: legs[0]!.departAt,
+        arriveAt: legs[legs.length - 1]!.arriveAt,
+        transfers: Math.max(0, legs.filter((l) => l.kind === "ride").length - 1),
+      };
+    };
 
     // Today, on top of the history. A route the TTC has flagged is not running
     // normally, and the reliability figure below is a record of normal days.
@@ -509,10 +781,9 @@ export function registerPlanner(app: FastifyInstance): void {
       disruptionsOn(best).filter((d) => isServiceAffecting(d.kind)).flatMap((d) => d.routeIds),
     );
     if (blocked.size > 0) {
-      const clear = plan(connections, footpaths, parsed.data.from, parsed.data.to,
+      const clear = plan(connections, footpaths, fromStop, toStop,
                          searchFrom, ARRIVE_BY_WINDOW_S, blocked, blockedStops);
-      const signature = (j: Journey): string => j.legs.map((l) => `${l.kind}:${l.routeId ?? ""}`).join(">");
-      if (clear !== null && !candidates.some((c) => signature(c) === signature(clear))) {
+      if (clear !== null && !candidates.some((c) => journeySignature(c) === journeySignature(clear))) {
         candidates.push(clear);
       }
     }
@@ -526,7 +797,7 @@ export function registerPlanner(app: FastifyInstance): void {
     // it is one extra plan on a request that already does several.
     const costStations: StationAccess[] = [];
     if (stepFree && blockedStops.size > 0) {
-      const unconstrained = plan(connections, footpaths, parsed.data.from, parsed.data.to,
+      const unconstrained = plan(connections, footpaths, fromStop, toStop,
                                  searchFrom, ARRIVE_BY_WINDOW_S);
       if (unconstrained !== null) {
         const byStation = new Map(blockedStations.map((b) => [b.station, b]));
@@ -550,7 +821,9 @@ export function registerPlanner(app: FastifyInstance): void {
     }
 
     const scored = await Promise.all(
-      candidates.map((j) => scoreJourney(j, segmentIndex, frequency, nameOf)),
+      // Cleaned before scoring, so the risk figures and the drawn route describe
+      // the journey the rider is actually shown (`E-D33`).
+      candidates.map((j) => scoreJourney(tidy(j), segmentIndex, frequency, nameOf)),
     );
     const byJourney = new Map(scored.map((j) => [j, disruptionsOn(j)]));
 
@@ -562,6 +835,48 @@ export function registerPlanner(app: FastifyInstance): void {
         (b.durationMinutes + b.reliability.expectedAddedMinutes),
     );
 
+    /**
+     * Drop options that are worse on every axis a rider can read.
+     *
+     * The generator bans a route the best journey uses and re-plans, so when
+     * there is no real second way it returns the best trip that exists *without
+     * the one route that works* — and the diversity pick then keeps it
+     * precisely because it shares fewest routes with the others. On one real
+     * trip that produced a 79-minute option beside a 37-minute one, and nothing
+     * asked whether it was worth a rider's attention.
+     *
+     * `D-14` is explicit that where there is no real alternative the honest
+     * output is one route and when to leave, not a menu. This is that rule
+     * applied to the list.
+     *
+     * **Dominated means slower, no safer, and no better measured** — all three,
+     * against a journey already kept. Slower alone is not enough: a longer trip
+     * that is genuinely safer, or one we can actually speak for, is a real
+     * choice. Both bars are ones this project already set and audited:
+     * `MATERIAL_RATIO` for whether a risk difference is worth acting on, and
+     * `MIN_COMPARABLE_COVERAGE` for whether a figure can be compared at all.
+     */
+    const kept: typeof scored = [];
+    for (const j of scored) {
+      const dominated = kept.some((k) => {
+        if (j.durationMinutes <= k.durationMinutes) return false;
+        const jr = j.reliability;
+        const kr = k.reliability;
+        // Better measured is a reason to keep it, whatever the clock says.
+        if (jr.coverage >= kr.coverage + (1 - MIN_COMPARABLE_COVERAGE) / 2) return false;
+        // Materially safer is a reason to keep it — but only where both figures
+        // are solid enough to compare. Two thin numbers do not make a verdict.
+        const comparable = jr.coverage >= MIN_COMPARABLE_COVERAGE
+          && kr.coverage >= MIN_COMPARABLE_COVERAGE;
+        if (comparable && jr.disruptionRisk > 0
+            && kr.disruptionRisk / jr.disruptionRisk >= MATERIAL_RATIO) return false;
+        return true;
+      });
+      if (!dominated) kept.push(j);
+    }
+    scored.length = 0;
+    scored.push(...kept);
+
     return {
       /**
        * When we last saw the live feed, and whether that is recent enough to
@@ -569,6 +884,23 @@ export function registerPlanner(app: FastifyInstance): void {
        * warning deserves to know whether that means "nothing wrong" or "we did
        * not look" (P-03).
        */
+      /**
+       * Walking the whole way, when that is a real option (`F-03`, `D-40`).
+       * Null on almost every trip, which is the honest answer: outside the
+       * core Toronto rarely offers a second way (`E-L12`, `E-D27`).
+       */
+      walk: (() => {
+        const a = doorFrom ?? stopCoords.get(fromStop);
+        const b = doorTo ?? stopCoords.get(toStop);
+        return a === undefined || b === undefined ? null : walkOption(a, b);
+      })(),
+      /**
+       * The walk at each end, when the rider gave a door rather than a stop.
+       * Null when they picked a stop — they meant that stop, and inventing a
+       * walk they did not ask for would inflate every figure on the card.
+       */
+      access: access === null ? null : { ...access, stopName: labelOf(access.stopId) },
+      egress: egress === null ? null : { ...egress, stopName: labelOf(egress.stopId) },
       alerts: { ageHours, stale: alertsStale },
       /**
        * Stations kept out of these results. Named rather than silently
@@ -624,6 +956,13 @@ export function registerPlanner(app: FastifyInstance): void {
                     type: "Feature" as const,
                     geometry: { type: "LineString" as const, coordinates: thin(JSON.parse(seg.geometry) as number[][]) },
                     properties: {
+                      // The stretch's own id, so the sheet can point the map at
+                      // one segment without matching on a name. `dominant` and
+                      // `worst` are display-cased on the way out (`named`), and
+                      // these are raw — comparing the two would fail silently
+                      // for exactly the reason `displayStopName` is kept off
+                      // every lookup path.
+                      segmentId: seg.id,
                       kind: "ride", risk: seg.risk,
                       gapMinutesPerMonth: seg.gapMinutesPerMonth,
                       gapMinutesPerMonthAtTime: seg.gapMinutesPerMonthAtTime,
@@ -645,6 +984,8 @@ export function registerPlanner(app: FastifyInstance): void {
                 type: "Feature" as const,
                 geometry: { type: "LineString" as const, coordinates: thin([[a.lon, a.lat], [b.lon, b.lat]]) },
                 properties: {
+                  // A walk is not a measured segment, so it has no id to point at.
+                  segmentId: null,
                   kind: "walk", risk: null, gapMinutesPerMonth: null,
                   gapMinutesPerMonthAtTime: null, conditioned: false,
                   confidence: "none",
