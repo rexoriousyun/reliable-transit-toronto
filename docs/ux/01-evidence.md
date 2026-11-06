@@ -1193,3 +1193,40 @@ walks off the output. Three tests cover it, including that case by name.
 route and when to leave, not a menu. The list was doing the opposite — manufacturing a menu
 out of the absence of alternatives, and topping the reliability column with the trip it knew
 least about.
+
+### E-D34 — The production build never drew a map
+*Found 2026-11-06 by screenshotting `npm start` for the README · MapLibre 6.6.0, Vite build*
+
+Every check of the deployable image passed, and every one of them was of the API: healthy
+3.1 s after start, `/plan` at 102 ms first call (`E-D25`). Nobody had looked at the map the
+production build serves. It was black. The page loaded, the sheet worked, a trip planned and
+its verdict printed, and the canvas drew nothing at all.
+
+**Cause.** MapLibre 6 starts its worker from a file beside its own module
+(`new URL("./maplibre-gl-worker.mjs", import.meta.url)`). In dev that file is served from
+`node_modules`, which is why `optimizeDeps.exclude` was enough there. A production build
+bundles MapLibre into `index-*.js` and does not emit the worker file, so the request 404s, the
+worker never starts, and nothing is thrown on the main thread. The September build in the main
+checkout has the same gap, so this has been true since the upgrade to MapLibre 6.
+
+**Fix.** `MapView.tsx` imports the worker with Vite's `?worker&url`, which bundles it with its
+shared chunk and gives it a real URL, and passes that to `setWorkerUrl` before any map is
+made. The build now emits `maplibre-gl-worker-*.js` (479 KB) and the map draws (README
+screenshots).
+
+*Why it matters:* `D-37` recorded the image as verified, and it was, for everything except the
+thing the product is built around. It also likely explains `E-D30`'s failed remedy: putting
+MapLibre behind a dynamic import "broke the map, worker fails to resolve". That was this, not
+the dynamic import, and the 1,192 ms first paint it measured is worth trying again.
+
+### E-D35 — The faint ink failed contrast in both themes, and its comment said it passed
+*Found 2026-11-06 by `design-guide check` on the production build*
+
+`--ink-3` carried the comment "4.6:1 on --surface-1. Do not go lighter." It measured
+**4.13:1** on `--surface-1` in dark (4.6:1 is against the page background, not the sheet), and
+the light value measured **4.15:1** on white. Every form label (From, To, When, Access) sat
+below the 4.5:1 floor. Now `#848480` in dark (4.61:1) and `#717168` in light (4.92:1 on
+`--surface-1`, 4.56:1 on `--surface-2`), both still well below `--ink-2` so the hierarchy holds.
+
+*Why it matters:* a number in a comment is a claim nobody re-measures. The comment was the
+reason nobody checked.

@@ -139,7 +139,10 @@ request origin, so it works behind the dev proxy and in production without confi
 
 **Vite does not emit MapLibre's web worker** when it pre-bundles the package — the worker
 404s, the canvas stays blank, and nothing errors on the main thread. `optimizeDeps.exclude`
-must list `maplibre-gl`.
+must list `maplibre-gl`. **That fixes dev only.** A production build does not emit the worker
+either, so `MapView.tsx` imports it with `?worker&url` and calls `setWorkerUrl` (`E-D34`). The
+built app shipped a black map, unnoticed, because every check of it was of the API.
+Screenshot `npm start`, not just `npm run dev`.
 
 **Do not forward `content-encoding` when proxying with `fetch`.** The body is already
 decompressed; echoing the header makes the browser try to gunzip plain bytes.

@@ -1,9 +1,15 @@
 import { useEffect, useRef } from "react";
-import { Map as MlMap, NavigationControl, GeolocateControl, type GeoJSONSource, type MapMouseEvent } from "maplibre-gl";
+import { Map as MlMap, NavigationControl, GeolocateControl, setWorkerUrl, type GeoJSONSource, type MapMouseEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { lineColorExpression, lineWidthExpression, tokensFor, UNKNOWN_OPACITY } from "./map.js";
 import { isDark } from "./theme.js";
 import type { RouteMap, SegmentFeature } from "./api.js";
+
+// MapLibre 6 loads its worker from a file beside its own module, and a
+// production build does not emit that file: the worker 404s and the map stays
+// blank with nothing thrown. Bundling the worker ourselves gives it a real URL.
+setWorkerUrl(workerUrl);
 
 /**
  * Served by our own tile proxy — the client never contacts the basemap host —
