@@ -1003,6 +1003,7 @@ export function registerPlanner(app: FastifyInstance): void {
         atTime: j.atTime === null ? null : {
           ...named(j.atTime),
           bands: j.atTime.bands,
+          span: j.atTime.span,
           conditionedShare: j.atTime.conditionedShare,
           // Only comparable against a reference measured in the same band.
           comparison: j.atTime.bands.length === 1

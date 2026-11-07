@@ -167,6 +167,8 @@ export interface JourneyReliability {
 
 export interface BandReliability extends JourneyReliability {
   bands: Array<{ id: string; label: string }>;
+  /** The window those bands cover, as one phrase ("6am to 3pm"). */
+  span: string;
   /** Share of scored stretches using their own band rather than the all-day figure. */
   conditionedShare: number;
 }

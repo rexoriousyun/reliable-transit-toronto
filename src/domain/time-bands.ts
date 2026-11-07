@@ -28,6 +28,26 @@ export const BANDS: readonly Band[] = [
   { id: "evening", label: "7pm to midnight", from: 19, to: 24 },
 ] as const;
 
+/** An hour as a rider says it: "midnight", "6am", "noon", "3pm". */
+function hourWord(h: number): string {
+  if (h % 24 === 0) return "midnight";
+  if (h === 12) return "noon";
+  return h < 12 ? `${h}am` : `${h - 12}pm`;
+}
+
+/**
+ * How a trip's window is named: one band's own label, or the span from the
+ * first band's start to the last one's end.
+ *
+ * Joining the two labels printed "6 to 9am to 9am to 3pm" on any trip that
+ * crossed 9am, on the toggle a rider uses to choose the figure.
+ */
+export function spanLabel(bands: readonly Band[]): string {
+  if (bands.length === 0) return "at this time";
+  if (bands.length === 1) return bands[0]!.label;
+  return `${hourWord(bands[0]!.from)} to ${hourWord(bands[bands.length - 1]!.to)}`;
+}
+
 export function bandOf(hour: number): Band {
   return BANDS.find((b) => hour >= b.from && hour < b.to) ?? BANDS[0]!;
 }

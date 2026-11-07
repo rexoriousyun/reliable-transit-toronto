@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { BANDS, bandOf, bandOfSeconds, inServiceDay, serviceDayTimes } from "../time-bands.js";
+import { BANDS, bandOf, bandOfSeconds, inServiceDay, serviceDayTimes, spanLabel } from "../time-bands.js";
 
 describe("bands", () => {
   it("covers every hour exactly once", () => {
@@ -63,5 +63,28 @@ describe("inServiceDay", () => {
   it("takes the fuller service day when an hour has two readings", () => {
     expect(inServiceDay(4 * 3600, window)).toBe(28 * 3600);
     expect(inServiceDay(9 * 3600, window)).toBe(9 * 3600);
+  });
+});
+
+describe("spanLabel", () => {
+  const band = (id: string) => BANDS.find((b) => b.id === id)!;
+
+  it("keeps one band's own label", () => {
+    expect(spanLabel([band("am-peak")])).toBe("6 to 9am");
+  });
+
+  it("names a crossing as one span, not two labels glued together", () => {
+    // Printed "6 to 9am to 9am to 3pm" on the toggle before.
+    expect(spanLabel([band("am-peak"), band("midday")])).toBe("6am to 3pm");
+    expect(spanLabel([band("midday"), band("pm-peak")])).toBe("9am to 7pm");
+  });
+
+  it("says midnight, not 0am or 12am, across the end of the day", () => {
+    expect(spanLabel([band("evening"), band("night")])).toBe("7pm to 6am");
+    expect(spanLabel([band("night"), band("am-peak")])).toBe("midnight to 9am");
+  });
+
+  it("falls back when no band was ridden", () => {
+    expect(spanLabel([])).toBe("at this time");
   });
 });

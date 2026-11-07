@@ -30,8 +30,6 @@ export function exposureProperty(view: View): string {
  * journey can cross one, and then the honest label is the span it covers.
  */
 export function bandLabel(j: ScoredJourney): string {
-  const bands = j.atTime?.bands ?? [];
-  if (bands.length === 0) return "at this time";
-  if (bands.length === 1) return bands[0]!.label;
-  return `${bands[0]!.label} to ${bands[bands.length - 1]!.label}`;
+  // Named on the server, where the bands' hours are defined (spanLabel).
+  return j.atTime?.span ?? "at this time";
 }

@@ -23,7 +23,7 @@ import { prisma } from "../db/client.js";
 import type { Journey, Leg } from "./csa.js";
 import { key, type SegmentFrequency } from "./frequency.js";
 import { isSubwayRoute, stationFromPlatform } from "./stations.js";
-import { bandOf, bandOfSeconds, BANDS, MIN_EXPECTED_IN_BAND, type Band } from "./time-bands.js";
+import { bandOf, bandOfSeconds, BANDS, MIN_EXPECTED_IN_BAND, spanLabel, type Band } from "./time-bands.js";
 import { neverCameShare } from "./vanishing.js";
 import { outsideMinutes, waitsOn, type WaitAtStop } from "./wait.js";
 
@@ -89,6 +89,8 @@ export interface JourneyReliability {
 export interface BandReliability extends JourneyReliability {
   /** The band this view is measured in — one per leg, in trip order. */
   bands: Array<{ id: string; label: string }>;
+  /** The window those bands cover, as one phrase ("6am to 3pm"). */
+  span: string;
   /**
    * Share of the scored stretches that used their own band's figure rather
    * than falling back to the all-day one. Stated on screen: a rider told
@@ -459,11 +461,11 @@ export async function scoreJourney(
 
   const waits = waitsOn(journey.legs, frequency);
 
-  const bandsRidden: Array<{ id: string; label: string }> = [];
+  const bandsRidden: Band[] = [];
   for (const leg of journey.legs) {
     if (leg.kind !== "ride") continue;
     const b = bandOfSeconds(leg.departAt);
-    if (!bandsRidden.some((x) => x.id === b.id)) bandsRidden.push({ id: b.id, label: b.label });
+    if (!bandsRidden.some((x) => x.id === b.id)) bandsRidden.push(b);
   }
 
   return {
@@ -488,7 +490,8 @@ export async function scoreJourney(
         ? null
         : {
             ...atTimeView.reliability,
-            bands: bandsRidden,
+            bands: bandsRidden.map((b) => ({ id: b.id, label: b.label })),
+            span: spanLabel(bandsRidden),
             conditionedShare:
               risks.length === 0 ? 0 : Number((bandRisks.length / risks.length).toFixed(2)),
           },
