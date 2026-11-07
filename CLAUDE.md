@@ -9,7 +9,8 @@ anchor for what the project is, where it stands, and what is open.
 
 | | |
 |---|---|
-| **Branch** | `claude/ny-trip-app-dev-paw8s8` — develop and push here, never elsewhere |
+| **Branch** | `main` — the default branch; work lands and is pushed here (Rex, 2026-11-06). `claude/ny-trip-app-dev-paw8s8` is the old one, kept, no longer pushed to |
+| **Repo** | `rexoriousyun/reliable-transit-toronto` (renamed from `20260828-newyork`; the local folder keeps the old name) |
 | **What it is** | A map-first TTC trip planner whose differentiator is reliability (`D-14`) |
 | **Read first** | `docs/STATE.md`, then `docs/ux/README.md` for how decisions are structured |
 | **Design** | `docs/design/00-concept.md` (concept) and `01-system.md` (rules, tokens, validation) |
