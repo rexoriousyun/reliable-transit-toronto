@@ -187,9 +187,10 @@ argued (E-D27, E-D28):
 - **A labelled comparison — "fastest" beside "most reliable" — belongs downtown only**
   (`D-40`). Citywide the two labels name the same journey on ~95% of trips; downtown a
   materially safer option exists on 12.3%. It lands in `F-03`, which is unbuilt.
-- **The risk unit stays "1 in N" for now** (`D-41`). A percentage is ruled out on
-  measurement — 74.4% of journeys would read "0%". The surviving candidate is the rider's own
-  calendar, and `Q-C` now carries it as a second prompt.
+- **The risk unit is now a percentage, with "1 in N" beside it** (`D-49`, superseding
+  `D-41` on the product owner's call, 2026-11-07). Two significant figures, so none of the
+  74.4% of journeys `E-D28` found would print "0%". `Q-C` still asks whether either unit
+  means anything to a rider; the calendar framing stays the candidate to test.
 
 One question is **not** for riders and is worth re-running when the archive grows: does
 per-segment severity persist over a longer window (`D-11`)? It failed at rho 0.10 on 19

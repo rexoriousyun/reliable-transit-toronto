@@ -1,5 +1,6 @@
 import { Fragment } from "react";
 import { hhmmDay } from "./clock.js";
+import { percent } from "./rate.js";
 import type { JourneyLeg, ScoredJourney } from "./api.js";
 import { legReliabilityFor, type View } from "./view.js";
 import { ConfidenceMark, levelForCoverage } from "./Confidence.js";
@@ -104,7 +105,8 @@ export function JourneyDetail({
                         "Not enough data on this stretch"
                       ) : (
                         <>
-                          Goes wrong 1 in {legReliabilityFor(l, view)!.oneInTrips}
+                          Goes wrong on <strong>{percent(legReliabilityFor(l, view)!.risk)}</strong> of trips{" "}
+                          <span className="rate-side">1 in {legReliabilityFor(l, view)!.oneInTrips}</span>
                           {legReliabilityFor(l, view)!.isWorst && (
                             <strong> — most of this trip&rsquo;s risk</strong>
                           )}

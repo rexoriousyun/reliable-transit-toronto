@@ -1,5 +1,7 @@
+import type { ReactNode } from "react";
 import type { Comparison, PlanResult, ScoredJourney } from "./api.js";
 import { hhmm, hhmmDay } from "./clock.js";
+import { percent, percentOfOneIn } from "./rate.js";
 import { reliabilityFor, type View } from "./view.js";
 import { ConfidenceBand, ConfidenceMark, levelForCoverage } from "./Confidence.js";
 import { TripTags } from "./TripTags.js";
@@ -104,15 +106,10 @@ export function VerdictCard({
               You'll usually be there by <strong>{hhmmDay(typicalArrival, anchor)}</strong>.
               {badArrival !== null && rel.oneInTrips !== null && (
                 <>
-                  {" "}About one {advice === null ? "trip" : "morning"} in{" "}
-                  <strong>{rel.oneInTrips}</strong>, closer to{" "}
-                  <strong>{hhmmDay(badArrival, anchor)}</strong>
-                  {/* Bound to its extent when the figure covers a minority of
-                      the trip. The band below shows the proportion, but the
-                      sentence is where the number is read. */}
-                  {rel.coverage < 0.5
-                    ? ` — on the ${Math.round(rel.coverage * 100)}% of this trip we can measure.`
-                    : "."}
+                  {/* How often is the rate line's job now; the sentence says
+                      what a bad day costs, so the figure is not printed twice. */}
+                  {" "}When it goes wrong, closer to{" "}
+                  <strong>{hhmmDay(badArrival, anchor)}</strong>.
                 </>
               )}
             </>
@@ -123,6 +120,25 @@ export function VerdictCard({
           <ConfidenceMark level={level} />
         </p>
       </div>
+
+      {/* How often this trip goes wrong, as a percentage first (Rex,
+          2026-11-07). "1 in N" stays beside it, smaller, for the reader who
+          thinks in trips. The mark keeps the figure's certainty within 8px
+          of it (D-45): on a thinly measured trip this is a floor. */}
+      {rel.oneInTrips !== null && (
+        <p className="rate-line">
+          <span className="rate-main t-stat">{percent(rel.disruptionRisk)}</span>
+          <span className="rate-label t-body-s">
+            of trips go wrong
+            {/* Bound to its extent when the figure covers a minority of the
+                trip. The band below shows the proportion, but this is where
+                the number is read. */}
+            {rel.coverage < 0.5 && `, on the ${Math.round(rel.coverage * 100)}% we can measure`}
+          </span>
+          <span className="rate-side">1 in {rel.oneInTrips}</span>
+          <ConfidenceMark level={level} />
+        </p>
+      )}
 
       {/* 2 — how much of this is measured. The band says in one bar what the
           "little data" tag said only past a threshold, and says it on every
@@ -249,24 +265,27 @@ function bandColour(comparison: Comparison | null): string {
  * does not support "safer than 87%", and that precision invites a trust it has
  * not earned (`PR-08`). Unchanged wording from the component this absorbs.
  */
-function benchmarkLabel(journey: ScoredJourney, view: View): string {
+function benchmarkLabel(journey: ScoredJourney, view: View): ReactNode {
   const c = reliabilityFor(journey, view).comparison;
   // No comparison means the trip is too thinly measured to rank against its
   // class (`MIN_COMPARABLE_COVERAGE`). The first version said "Measured" here,
   // directly beside a bar reading "62% not measured" — two claims about the
   // same trip, contradicting each other, in one line.
   if (c === null) return "Too little history to compare";
-  const typical = c.typicalOneInTrips === null ? "" : ` · typical is 1 in ${c.typicalOneInTrips}`;
-  switch (c.verdict) {
-    case "safer-4in5":
-      return `Safer than 4 in 5 trips this long${typical}`;
-    case "safer-most":
-      return `Safer than most trips this long${typical}`;
-    case "riskier-most":
-      return `Riskier than most trips this long${typical}`;
-    case "riskier-4in5":
-      return `Riskier than 4 in 5 trips this long${typical}`;
-    default:
-      return `About typical for trips this long${typical}`;
-  }
+  const words = {
+    "safer-4in5": "Safer than 4 in 5 trips this long",
+    "safer-most": "Safer than most trips this long",
+    "riskier-most": "Riskier than most trips this long",
+    "riskier-4in5": "Riskier than 4 in 5 trips this long",
+    typical: "About typical for trips this long",
+  }[c.verdict];
+  // The ranking stays in fifths, not percentages: that is a rank against a
+  // few hundred sampled trips, not a rate (see Benchmark.tsx).
+  if (c.typicalOneInTrips === null) return words;
+  return (
+    <>
+      {words} · typical is {percentOfOneIn(c.typicalOneInTrips)}{" "}
+      <span className="rate-side">1 in {c.typicalOneInTrips}</span>
+    </>
+  );
 }

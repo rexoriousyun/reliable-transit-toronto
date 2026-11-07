@@ -13,6 +13,8 @@
  * unknown is not an edge case here, it is most of the network.
  */
 
+import type { ReactNode } from "react";
+
 export type ConfidenceLevel = "measured" | "thin" | "unknown";
 
 export function ConfidenceMark({
@@ -62,7 +64,7 @@ export function ConfidenceBand({
   measuredPct: number;
   /** The encoding colour for this trip's risk, so the bar reads on one scale. */
   color: string;
-  label: string;
+  label: ReactNode;
   unknownLabel?: string;
 }): JSX.Element {
   const pct = Math.max(0, Math.min(1, measuredPct));

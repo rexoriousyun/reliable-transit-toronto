@@ -817,6 +817,13 @@ select option { background: var(--surface-1); color: var(--ink); }
 .verdict-head { margin: 0; color: var(--ink); }
 .verdict-late .verdict-head { color: var(--scale-3); }
 .verdict-sentence { margin: 0; color: var(--ink-2); }
+/* The issue rate: the percentage leads, "1 in N" rides beside it, smaller
+   and quieter (Rex, 2026-11-07). */
+.rate-line { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 var(--s2); margin: 0; }
+.rate-main { color: var(--ink); }
+.rate-label { color: var(--ink-2); }
+.rate-line .cmark { align-self: center; }
+.rate-side { font-size: max(11px, 0.85em); font-weight: 400; color: var(--ink-3); white-space: nowrap; }
 .verdict-sentence strong { color: var(--ink); font-weight: 700; }
 /* The mark sits with the sentence it qualifies, never on its own line. */
 .verdict-sentence .cmark { margin-left: 6px; vertical-align: middle; }

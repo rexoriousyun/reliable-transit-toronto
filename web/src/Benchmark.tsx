@@ -1,4 +1,5 @@
 import type { Comparison } from "./api.js";
+import { percentOfOneIn } from "./rate.js";
 
 /**
  * How this trip compares with others of its length.
@@ -40,7 +41,10 @@ export function Benchmark({ comparison }: { comparison: Comparison | null }): JS
     <p className={`benchmark benchmark-${TONE[comparison.verdict]}`}>
       <strong>{WORDS[comparison.verdict]}</strong>
       {comparison.typicalOneInTrips !== null && (
-        <> — typically 1 in {comparison.typicalOneInTrips}.</>
+        <>
+          {" "}— typically {percentOfOneIn(comparison.typicalOneInTrips)}{" "}
+          <span className="rate-side">1 in {comparison.typicalOneInTrips}</span>.
+        </>
       )}
     </p>
   );

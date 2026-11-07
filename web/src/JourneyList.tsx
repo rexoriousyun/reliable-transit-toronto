@@ -1,5 +1,6 @@
 import type { ScoredJourney } from "./api.js";
 import { hhmm, hhmmDay } from "./clock.js";
+import { percent } from "./rate.js";
 import { reliabilityFor, type View } from "./view.js";
 import { Benchmark } from "./Benchmark.js";
 
@@ -94,12 +95,14 @@ function Journey({
           <>Not enough data to say how often this goes wrong.</>
         ) : thin ? (
           <>
-            <strong>1 in {rel.oneInTrips}</strong> on the{" "}
-            <strong>{Math.round(rel.coverage * 100)}%</strong> of this route we can measure.
+            Goes wrong on <strong>{percent(rel.disruptionRisk)}</strong> of trips{" "}
+            <span className="rate-side">1 in {rel.oneInTrips}</span>, measured on only{" "}
+            <strong>{Math.round(rel.coverage * 100)}%</strong> of this route.
           </>
         ) : (
           <>
-            Goes wrong about <strong>1 trip in {rel.oneInTrips}</strong>
+            Goes wrong on <strong>{percent(rel.disruptionRisk)}</strong> of trips{" "}
+            <span className="rate-side">1 in {rel.oneInTrips}</span>
             {showSeverity ? (
               <>
                 {" — "}

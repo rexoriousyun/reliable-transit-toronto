@@ -1356,7 +1356,12 @@ and gives more of the city genuine parallel capacity, the same condition `D-13` 
 
 ---
 
-## D-41 — The unit stays "1 in N" until a rider replaces it `OPEN`
+## D-41 — The unit stays "1 in N" until a rider replaces it `SUPERSEDED by D-49`
+
+> **Superseded 2026-11-07.** The product owner asked for the percentage to lead. The
+> measurement below still stands; what it ruled out was a percentage at *fixed* precision.
+> `D-49` keeps the signal with significant figures instead.
+
 **Cites:** P-01, P-03, P-08 · **Personas:** U-02 · **Journeys:** J-01 ·
 **Problems:** PR-08 · **Evidence:** E-D28, E-D19, E-D21
 
@@ -1594,3 +1599,39 @@ distrust the trip — the straight-line floor is the weak point, and a real walk
 > within `TIE_SECONDS` of each other, the one with fewer rides wins. The threshold is sized to
 > the uncertainty in our own walking estimate rather than tuned — resolving a margin smaller
 > than our error with an extra bus ride is the false precision `P-08` refuses.
+
+---
+
+## D-49 — The issue rate leads as a percentage, with "1 in N" beside it `ACCEPTED · IMPLEMENTED`
+**Cites:** P-03, P-08 · **Evidence:** E-D28 · **Supersedes:** D-41 ·
+**Source:** the product owner, 2026-11-07 — *"change to percentage of issue rate than showing
+~ in ~. keep percentage as main and the other as side with smaller letters."*
+
+A preference of the product owner's, not a finding: no rider has been asked (`Q-C` stays open).
+Recorded as one, with the measurement it had to survive.
+
+**Everywhere the rate appears**, the percentage is the figure in the reading weight, and
+"1 in N" sits beside it in a smaller, quieter style: the trip card in the list, each leg in
+step by step, the benchmark's typical figure, and a new line on the answer card. That card
+gave only the *typical* rate before, which left the trip's own number one tap away from the
+verdict that judged it.
+
+**Two significant figures, never fixed decimals.** `E-D28` is why `D-41` refused a percentage:
+per-trip risk sits almost entirely inside the first percent, so whole percents print "0%" on
+74.4% of journeys and one decimal still prints "0.0%" on 12.6%. Significant figures keep the
+whole range distinct: the sample's p10, p50 and p90 read **0.043%, 0.22%, 0.94%**. At 10% and
+above, whole numbers. A rate is "0%" only when it is zero.
+
+**What did not change.** "Safer than 4 in 5 trips this long" stays in fifths. That is a rank
+against a few hundred sampled trips, not a rate, and `D-28` chose fifths so it would not claim
+precision the reference cannot support. Coverage stays a percentage of the trip, and the
+confidence mark stays within 8px of the figure (`D-45`).
+
+**One line moved.** With a deadline, the sentence used to carry the rate ("about one morning
+in 104, closer to 09:07"). The rate line now says how often, so the sentence says only what a
+bad day costs ("When it goes wrong, closer to 09:07"), and the bound for a thinly measured trip
+("on the 40% we can measure") moved onto the rate line beside the number it qualifies.
+
+**Reversed if:** riders read "0.22%" as "never" more often than they read "1 in 459" as rare.
+That is `Q-C`'s question, and the calendar framing `D-41` proposed is still the candidate to
+test against both.
