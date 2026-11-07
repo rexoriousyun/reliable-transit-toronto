@@ -148,6 +148,19 @@ export function clusterAlerts(alerts: readonly AlertLike[]): Disruption[] {
  */
 export const ALERTS_STALE_AFTER_HOURS = 12;
 
+/**
+ * When the alert snapshot was taken.
+ *
+ * The newest stored row, or the last fetch that succeeded and found nothing.
+ * Reading it off the rows alone meant a quiet day, with no alerts at all, had
+ * no time and so read as "we could not check" rather than "nothing is wrong".
+ */
+export function snapshotTime(rowTimes: Date[], lastFetch: Date | null): Date | null {
+  let newest = lastFetch;
+  for (const t of rowTimes) if (newest === null || t > newest) newest = t;
+  return newest;
+}
+
 export function alertAgeHours(fetchedAt: Date, now: Date): number {
   return Math.max(0, (now.getTime() - fetchedAt.getTime()) / 3600000);
 }

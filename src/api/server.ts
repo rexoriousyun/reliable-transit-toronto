@@ -12,6 +12,7 @@ import { liveRoutes } from "../domain/realtime.js";
 import { recencyWeight, effectiveMonths, observationMonths } from "../domain/score.js";
 import { registerTiles } from "./tiles.js";
 import { registerPlanner, warmGraph } from "./planner.js";
+import { ingestAlerts } from "../ingest/alerts.js";
 import { stationAccessMap, endpointState, isUsable } from "../domain/accessibility.js";
 
 /**
@@ -561,10 +562,32 @@ const port = Number(process.env["PORT"] ?? 3000);
  * platforms read as a failed deploy and retry. Listening immediately and
  * failing the health check is the state they are built to wait through.
  */
+/**
+ * How often the running server re-reads the TTC's service alerts.
+ *
+ * They were fetched only by `npm run ingest`, so a server left running went
+ * stale twelve hours later and every answer said "Today's detours may be
+ * missing": true, and avoidable. Incidents clear in hours; five minutes is
+ * well inside that, and one small request each time.
+ */
+const ALERTS_REFRESH_MS = 5 * 60 * 1000;
+
+async function refreshAlerts(): Promise<void> {
+  try {
+    const { total } = await ingestAlerts();
+    app.log.info({ total }, "alerts refreshed");
+  } catch (err: unknown) {
+    // Keep the last snapshot. Its age is on every answer, and past twelve
+    // hours the app says it could not check (ALERTS_STALE_AFTER_HOURS).
+    app.log.warn({ err: String(err) }, "alerts refresh failed; keeping the last snapshot");
+  }
+}
+
 app.listen({ port, host: "0.0.0.0" })
   .then(async () => {
     const t = Date.now();
-    await Promise.all([warmGraph(), buildRanking()]);
+    await Promise.all([warmGraph(), buildRanking(), refreshAlerts()]);
+    setInterval(() => void refreshAlerts(), ALERTS_REFRESH_MS).unref();
     ready = true;
     app.log.info({ ms: Date.now() - t }, "warm — accepting traffic");
   })

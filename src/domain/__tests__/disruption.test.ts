@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   classifyDisruption, causeOf, hasShuttle, withoutRoutePrefix, clusterAlerts,
-  isServiceAffecting, moreSevere, alertAgeHours, ALERTS_STALE_AFTER_HOURS,
+  isServiceAffecting, moreSevere, alertAgeHours, ALERTS_STALE_AFTER_HOURS, snapshotTime,
 } from "../disruption.js";
 
 /** Verbatim from the live feed on 2026-08-29. */
@@ -132,5 +132,26 @@ describe("alert freshness", () => {
     // only evidence an alert is live. Past the bar we say we do not know.
     expect(alertAgeHours(at(ALERTS_STALE_AFTER_HOURS - 1), now)).toBeLessThan(ALERTS_STALE_AFTER_HOURS);
     expect(alertAgeHours(at(ALERTS_STALE_AFTER_HOURS + 1), now)).toBeGreaterThan(ALERTS_STALE_AFTER_HOURS);
+  });
+});
+
+describe("snapshotTime", () => {
+  const t = (iso: string): Date => new Date(iso);
+
+  it("is the newest stored alert", () => {
+    expect(snapshotTime([t("2026-11-07T10:00Z"), t("2026-11-07T12:00Z")], null)).toEqual(t("2026-11-07T12:00Z"));
+  });
+
+  it("counts a fetch that found no alerts, so a quiet day is not read as unchecked", () => {
+    expect(snapshotTime([], t("2026-11-07T12:00Z"))).toEqual(t("2026-11-07T12:00Z"));
+  });
+
+  it("takes the later of the rows and the last fetch", () => {
+    expect(snapshotTime([t("2026-11-07T12:00Z")], t("2026-11-07T09:00Z"))).toEqual(t("2026-11-07T12:00Z"));
+    expect(snapshotTime([t("2026-11-07T09:00Z")], t("2026-11-07T12:00Z"))).toEqual(t("2026-11-07T12:00Z"));
+  });
+
+  it("is unknown when nothing has ever been fetched", () => {
+    expect(snapshotTime([], null)).toBeNull();
   });
 });

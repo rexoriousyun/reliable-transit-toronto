@@ -14,8 +14,9 @@ import { loadConnections, type ConnectionSet } from "../domain/connections.js";
 import { displayStopName, displayStationName } from "../domain/stop-names.js";
 import { departureAdvice, latestDeparture } from "../domain/departure.js";
 import { inServiceDay, serviceDayTimes, DAY_SECONDS } from "../domain/time-bands.js";
-import { clusterAlerts, isServiceAffecting, alertAgeHours, ALERTS_STALE_AFTER_HOURS,
+import { clusterAlerts, isServiceAffecting, alertAgeHours, ALERTS_STALE_AFTER_HOURS, snapshotTime,
   type Disruption } from "../domain/disruption.js";
+import { lastAlertsFetch } from "../ingest/alerts.js";
 import { stationAccessMap, isUsable, type StationAccess } from "../domain/accessibility.js";
 import { stationFromPlatform } from "../domain/stations.js";
 import { BENCHMARK_PATH, MATERIAL_RATIO, MIN_COMPARABLE_COVERAGE, bucketFor, percentileOf, verdictFor,
@@ -194,8 +195,7 @@ async function disruptionsByRoute(): Promise<{
   const rows = await prisma.serviceAlert.findMany({
     select: { id: true, description: true, routeIds: true, isElevator: true, fetchedAt: true },
   });
-  const fetchedAt = rows.length === 0 ? null
-    : rows.reduce((a, r) => (r.fetchedAt > a ? r.fetchedAt : a), rows[0]!.fetchedAt);
+  const fetchedAt = snapshotTime(rows.map((r) => r.fetchedAt), lastAlertsFetch());
   const ageHours = fetchedAt === null ? null : Number(alertAgeHours(fetchedAt, new Date()).toFixed(1));
   const stale = ageHours === null || ageHours > ALERTS_STALE_AFTER_HOURS;
   const events = clusterAlerts(rows.map((r) => ({

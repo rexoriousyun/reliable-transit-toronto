@@ -25,6 +25,10 @@ function firstTranslation(text: TranslatedLike | null | undefined): string {
   return text?.translation?.[0]?.text ?? "";
 }
 
+/** The last fetch that succeeded in this process, alerts or none. */
+let lastFetch: Date | null = null;
+export const lastAlertsFetch = (): Date | null => lastFetch;
+
 export async function ingestAlerts(): Promise<{ total: number; elevator: number }> {
   const res = await fetch(ALERTS_URL);
   if (!res.ok) throw new Error(`Alerts feed failed (${res.status})`);
@@ -51,8 +55,13 @@ export async function ingestAlerts(): Promise<{ total: number; elevator: number 
       };
     });
 
-  await prisma.serviceAlert.deleteMany();
-  if (records.length > 0) await prisma.serviceAlert.createMany({ data: records });
+  // One transaction, so a plan read mid-refresh never sees an empty table:
+  // the server now runs this every few minutes while riders are planning.
+  await prisma.$transaction([
+    prisma.serviceAlert.deleteMany(),
+    prisma.serviceAlert.createMany({ data: records }),
+  ]);
+  lastFetch = new Date();
 
   return { total: records.length, elevator: records.filter((r) => r.isElevator).length };
 }
