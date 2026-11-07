@@ -143,7 +143,9 @@ body {
 .t-micro { font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
 
 .app { position: relative; height: 100%; overflow: hidden; }
-.map { position: absolute; inset: 0; }
+/* Its own layer at 0, so its controls stay under the topbar and sheet now
+   that the map comes last in the page order. */
+.map { position: absolute; inset: 0; z-index: 0; }
 
 /* ---- Controls ------------------------------------------------------------
    Float over the map: vertical space is the scarce resource on a phone, so a

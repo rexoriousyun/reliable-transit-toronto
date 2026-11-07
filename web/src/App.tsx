@@ -340,15 +340,6 @@ export function App(): JSX.Element {
 
   return (
     <div className="app">
-      <MapView
-        data={mode === "explore" ? data : null}
-        journey={mode === "plan" ? (chosenJourney?.geojson ?? null) : null}
-        fitToken={`${mode}|${chosen ?? ""}|${listOpen ? "open" : "peek"}`}
-        exposureProperty={exposureProperty(view)}
-        onSelect={onSelect}
-        selectedId={feature?.properties.segmentId ?? null}
-      />
-
       <div className="topbar" ref={topbarRef}>
         <div className="modes" role="tablist" aria-label="Mode">
           <button role="tab" aria-selected={mode === "plan"} onClick={() => setMode("plan")}>Plan a trip</button>
@@ -614,6 +605,18 @@ export function App(): JSX.Element {
           </div>
         )
       )}
+
+      {/* Last in the page so keyboard focus reaches the trip form first: the
+          map's zoom, locate and credit links used to take 11 Tab presses
+          before "From". It still paints underneath (.map has z-index 0). */}
+      <MapView
+        data={mode === "explore" ? data : null}
+        journey={mode === "plan" ? (chosenJourney?.geojson ?? null) : null}
+        fitToken={`${mode}|${chosen ?? ""}|${listOpen ? "open" : "peek"}`}
+        exposureProperty={exposureProperty(view)}
+        onSelect={onSelect}
+        selectedId={feature?.properties.segmentId ?? null}
+      />
     </div>
   );
 }
